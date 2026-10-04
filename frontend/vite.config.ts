@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   build: {
     rollupOptions: {
-      // icons.html and palette.html are dev-only previews; ship just the app.
+      // icons.html, palette.html and brand.html are dev-only previews; ship just the app.
       input: 'index.html',
     },
   },

@@ -22,6 +22,13 @@ layers can't read CSS, so the ink is repeated as `INK` in
 | `--rubric` | `#b8321f` | the one accent: focus outlines, selection | 5.2 : 1 |
 | `--lapis` | `#2b4fb8` | links | 6.3 : 1 |
 | `--gold` | `#e5b320` | decoration only (header quote marks) | 1.7 : 1, never for text |
+| `--brand` | `#6e1f1c` | oxblood: header logo and title | 9.8 : 1 |
+| `--action` | rubric | adding a place: the "+" button and the candidate pin | 5.2 : 1 (white on it 6.0) |
+| `--action-panel` | 6% `--action` in `--panel` | the add-a-place drawer | n/a |
+
+Oxblood was picked from the candidates on `/brand.html` (deep azurite felt off):
+a darker sibling of the rubric action, so header and "+" button read as one
+family.
 
 ## Tag colours
 

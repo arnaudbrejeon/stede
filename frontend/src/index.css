@@ -9,6 +9,7 @@
   --rubric: #b8321f; /* the one accent: focus and selection */
   --lapis: #2b4fb8; /* links */
   --gold: #e5b320; /* decoration only; too light for text */
+  --brand: #6e1f1c; /* oxblood: header logo and title, a deeper sibling of rubric */
   --action: var(--rubric); /* adding a place: the "+" button and the candidate pin */
   --action-panel: color-mix(in srgb, var(--action) 6%, var(--panel)); /* its drawer */
   --shadow: 43, 36, 29; /* ink as r, g, b for translucent shadows */
@@ -284,6 +285,12 @@ body,
   /* Above the map and its drawer, so their shadows fall underneath it. */
   position: relative;
   z-index: 3;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--brand);
 }
 .header-name {
   font-family: var(--font-display);
