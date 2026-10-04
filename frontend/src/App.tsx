@@ -1,8 +1,11 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { AddPlaceSearch } from './components/AddPlaceSearch'
+import { Drawer } from './components/Drawer'
 import { FilterPanel } from './components/FilterPanel'
 import { Header } from './components/Header'
-import { PlaceDrawer } from './components/PlaceDrawer'
-import { PlacesMap } from './components/PlacesMap'
+import { PlaceDetails } from './components/PlaceDetails'
+import { PlacesMap, type PlacesMapHandle } from './components/PlacesMap'
+import type { GeocodeResult } from './geocoder'
 import { allTags, filterPlaces, SAMPLE_PLACES } from './places'
 import { buildTagColors } from './tags'
 
@@ -10,7 +13,10 @@ function App() {
   const [query, setQuery] = useState('')
   const [selectedTags, setSelectedTags] = useState<ReadonlySet<string>>(new Set())
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  // Browsing your places is the default; searching for a new one is opt-in.
+  const [searching, setSearching] = useState(false)
   const drawerRef = useRef<HTMLElement>(null)
+  const mapRef = useRef<PlacesMapHandle>(null)
 
   const tags = useMemo(() => allTags(SAMPLE_PLACES), [])
   const tagColors = useMemo(() => buildTagColors(tags), [tags])
@@ -19,8 +25,38 @@ function App() {
     [query, selectedTags],
   )
   // Looked up in the filtered set, so the drawer closes when filters hide the place.
-  const selected = filtered.features.find((f) => f.properties.id === selectedId) ?? null
-  const closeDrawer = useCallback(() => setSelectedId(null), [])
+  const selected = searching
+    ? null
+    : (filtered.features.find((f) => f.properties.id === selectedId) ?? null)
+  const drawerOpen = searching || selected !== null
+
+  const openSearch = () => {
+    setSelectedId(null)
+    setSearching(true)
+  }
+  const closeDrawer = useCallback(() => {
+    setSelectedId(null)
+    setSearching(false)
+    mapRef.current?.clearLocation()
+  }, [])
+  // Clicking a place leaves search for its details; clicking empty map while
+  // searching keeps the search open, since that's usually looking around.
+  const selectOnMap = useCallback((id: number | null) => {
+    if (id === null) return setSelectedId(null)
+    setSearching(false)
+    mapRef.current?.clearLocation()
+    setSelectedId(id)
+  }, [])
+
+  const getMapView = useCallback(() => mapRef.current?.getView(), [])
+  const showSearchResult = useCallback(
+    (result: GeocodeResult) => mapRef.current?.showLocation(result),
+    [],
+  )
+  const previewSearchResult = useCallback(
+    (result: GeocodeResult) => mapRef.current?.previewLocation(result),
+    [],
+  )
 
   const toggleTag = (tag: string) =>
     setSelectedTags((prev) => {
@@ -30,32 +66,52 @@ function App() {
     })
 
   return (
-    <div className={`app${selected ? ' drawer-open' : ''}`}>
+    <div className={`app${drawerOpen ? ' drawer-open' : ''}`}>
       <Header />
       <main className="main">
         <PlacesMap
+          ref={mapRef}
           places={filtered}
           selectedId={selected?.properties.id ?? null}
-          onSelect={setSelectedId}
-          tagColors={tagColors}
+          onSelect={selectOnMap}
+          drawerOpen={drawerOpen}
+            tagColors={tagColors}
           overlayRef={drawerRef}
         />
-        <FilterPanel
-          query={query}
-          onQueryChange={setQuery}
-          tags={tags}
-          selectedTags={selectedTags}
-          onToggleTag={toggleTag}
-          tagColors={tagColors}
-          shown={filtered.features.length}
-          total={SAMPLE_PLACES.features.length}
-        />
-        <PlaceDrawer
+        {/* Filters are for browsing your places; out of the way while adding one. */}
+        {!searching && (
+          <FilterPanel
+            query={query}
+            onQueryChange={setQuery}
+            tags={tags}
+            selectedTags={selectedTags}
+            onToggleTag={toggleTag}
+            tagColors={tagColors}
+            shown={filtered.features.length}
+            total={SAMPLE_PLACES.features.length}
+          />
+        )}
+        {!searching && (
+          <button type="button" className="add-place" onClick={openSearch}>
+            <span aria-hidden="true">+</span> Add a place
+          </button>
+        )}
+        <Drawer
           ref={drawerRef}
-          place={selected}
+          open={drawerOpen}
           onClose={closeDrawer}
-          tagColors={tagColors}
-        />
+          label={searching ? 'Add a place' : 'Place details'}
+        >
+          {searching ? (
+            <AddPlaceSearch
+              getView={getMapView}
+              onPick={showSearchResult}
+              onPreview={previewSearchResult}
+            />
+          ) : (
+            selected && <PlaceDetails place={selected} tagColors={tagColors} />
+          )}
+        </Drawer>
       </main>
     </div>
   )

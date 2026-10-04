@@ -5,6 +5,7 @@
   --line: #dde3ea;
   --cluster: #1d2733;
   --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Fondamento', Georgia, serif;
 }
 * {
   box-sizing: border-box;
@@ -37,6 +38,135 @@ body,
   padding: 12px;
   box-shadow: 0 2px 12px rgba(29, 39, 51, 0.12);
 }
+.add-search input {
+  width: 100%;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 15px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.add-search input:focus-visible {
+  outline: 2px solid #1f6fb2;
+  outline-offset: 1px;
+}
+.search-results {
+  margin: 8px -20px 0;
+}
+.search-group {
+  padding: 12px 20px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.search-results > div + div .search-group {
+  margin-top: 6px;
+  border-top: 1px solid var(--line);
+}
+.search-result {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 20px;
+  cursor: pointer;
+}
+.search-result[aria-selected='true'] {
+  background: #f1f4f7;
+}
+.link-button {
+  padding: 0;
+  margin: 12px 0 10px;
+  font: inherit;
+  font-size: 13px;
+  color: #1f6fb2;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.result-image {
+  position: relative;
+  margin: 0 0 12px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #eef1f4;
+}
+.result-image.loading {
+  animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .result-image.loading {
+    animation: none;
+  }
+}
+.result-image.none {
+  display: none;
+}
+.result-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.result-image figcaption {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 1px 6px;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 4px;
+}
+.result-image figcaption a {
+  color: var(--muted);
+}
+.result-details h3 {
+  margin: 0 0 2px;
+  font-size: 18px;
+}
+.result-subtitle {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.result-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  margin: 0;
+  font-size: 14px;
+}
+.result-facts dt {
+  color: var(--muted);
+}
+.result-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.result-facts a {
+  color: #1f6fb2;
+}
+.search-title {
+  font-size: 14px;
+}
+.search-subtitle {
+  font-size: 12px;
+  color: var(--muted);
+}
+.search-note {
+  margin: 0;
+  padding: 8px 20px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
 .panel input {
   width: 100%;
   padding: 8px 10px;
@@ -110,9 +240,11 @@ body,
   z-index: 3;
 }
 .header-name {
-  font-size: 19px;
-  font-weight: 650;
-  letter-spacing: 0.01em;
+  font-family: var(--font-display);
+  font-size: 24px;
+  /* Fondamento has a single weight; avoid a synthesised bold. */
+  font-weight: 400;
+  line-height: 1;
 }
 .header-quote {
   margin-left: auto;
@@ -121,7 +253,8 @@ body,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-family: var(--font-display);
+  font-size: 15px;
   font-style: italic;
   color: var(--muted);
 }
@@ -132,11 +265,13 @@ body,
   }
 }
 
-/* Everything laid over the map is positioned against this. */
+/* Everything laid over the map is positioned against this. Never scrolls, so
+   the off-screen drawer can't drag the map along. */
 .main {
   position: relative;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 /* Keep the map's right-hand controls clear of the side drawer. */
@@ -148,11 +283,50 @@ body,
 .app.drawer-open .maplibregl-ctrl-bottom-right {
   right: var(--drawer-width);
 }
+.app.drawer-open .add-place {
+  right: calc(var(--drawer-width) + 12px);
+}
 @media (orientation: portrait) and (max-width: 640px) {
   .app.drawer-open .maplibregl-ctrl-top-right,
   .app.drawer-open .maplibregl-ctrl-bottom-right {
     right: 0;
   }
+}
+
+.add-place {
+  position: absolute;
+  z-index: 1;
+  right: 12px;
+  /* Clear of the map attribution in the corner. */
+  bottom: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--ink);
+  border: 0;
+  border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(29, 39, 51, 0.3);
+  cursor: pointer;
+  transition: right var(--drawer-duration) ease;
+}
+/* The attribution wraps to two lines on narrow screens. */
+@media (max-width: 640px) {
+  .add-place {
+    bottom: 60px;
+  }
+}
+.add-place span {
+  font-size: 20px;
+  line-height: 1;
+}
+.add-place:focus-visible {
+  outline: 2px solid #1f6fb2;
+  outline-offset: 2px;
 }
 
 .drawer {
@@ -238,7 +412,8 @@ body,
 .drawer-body {
   padding: 16px 20px 24px;
 }
-.drawer-body h2 {
+.drawer-body h2,
+.add-search h2 {
   margin: 0 36px 4px 0;
   font-size: 20px;
 }

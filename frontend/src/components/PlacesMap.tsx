@@ -1,7 +1,8 @@
 import * as maplibregl from 'maplibre-gl'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { useEffect, useRef, type RefObject } from 'react'
+import { useEffect, useImperativeHandle, useRef, type Ref, type RefObject } from 'react'
+import type { GeocodeResult, MapView } from '../geocoder'
 import { drawMarker, isMarkerImageId, MARKER_RADIUS, markerImageId } from '../placeMarker'
 import type { Places } from '../places'
 import type { TagColors } from '../tags'
@@ -13,16 +14,37 @@ maplibregl.setWorkerUrl(workerUrl)
 const OPENFREEMAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty'
 const SOURCE_ID = 'places'
 
+export type PlacesMapHandle = {
+  // Visible area, clamped to the world (zoomed out, MapLibre reports wrapped longitudes).
+  getView: () => MapView | undefined
+  // Fly to a search result (in the area beside the drawer) and mark it.
+  showLocation: (result: GeocodeResult) => void
+  // Pan to a result without zooming, e.g. while hovering it in a list.
+  previewLocation: (result: GeocodeResult) => void
+  clearLocation: () => void
+}
+
 type PlacesMapProps = {
+  ref?: Ref<PlacesMapHandle>
   places: Places
   selectedId: number | null
   onSelect: (id: number | null) => void
+  // Opening saves the view; closing restores it.
+  drawerOpen: boolean
   tagColors: TagColors
   // Panel laid over the map edge; the selected place is centred in the area it leaves visible.
   overlayRef?: RefObject<HTMLElement | null>
 }
 
-export function PlacesMap({ places, selectedId, onSelect, tagColors, overlayRef }: PlacesMapProps) {
+export function PlacesMap({
+  ref,
+  places,
+  selectedId,
+  onSelect,
+  drawerOpen,
+  tagColors,
+  overlayRef,
+}: PlacesMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   // Latest props, so handlers registered once on the map never see stale values.
@@ -32,7 +54,55 @@ export function PlacesMap({ places, selectedId, onSelect, tagColors, overlayRef 
   const tagColorsRef = useRef(tagColors)
   // View from before the drawer opened, restored when it closes. Dropped if the
   // user moves the map meanwhile, so closing never undoes their own panning.
-  const viewBeforeSelectRef = useRef<{ center: maplibregl.LngLat; zoom: number } | null>(null)
+  const viewBeforeDrawerRef = useRef<{ center: maplibregl.LngLat; zoom: number } | null>(null)
+  const drawerOpenRef = useRef(drawerOpen)
+  const locationMarkerRef = useRef<maplibregl.Marker | null>(null)
+
+  const placeLocationMarker = (map: maplibregl.Map, center: [number, number]) => {
+    locationMarkerRef.current ??= new maplibregl.Marker({ color: '#1d2733' })
+    locationMarkerRef.current.setLngLat(center).addTo(map)
+  }
+
+  useImperativeHandle(ref, () => ({
+    getView: () => {
+      const bounds = mapRef.current?.getBounds()
+      if (!bounds) return undefined
+      const clamp = (v: number, limit: number) => Math.max(-limit, Math.min(limit, v))
+      return {
+        west: clamp(bounds.getWest(), 180),
+        south: clamp(bounds.getSouth(), 90),
+        east: clamp(bounds.getEast(), 180),
+        north: clamp(bounds.getNorth(), 90),
+      }
+    },
+    previewLocation: (result) => {
+      const map = mapRef.current
+      if (!map) return
+      const center = result.geometry.coordinates as [number, number]
+      placeLocationMarker(map, center)
+      const offset = insetOffset(overlayInset(map.getContainer(), overlayRef?.current))
+      // Short, so sweeping the pointer down the list stays responsive.
+      map.easeTo({ center, offset, duration: 400 })
+    },
+    showLocation: (result) => {
+      const map = mapRef.current
+      if (!map) return
+      const center = result.geometry.coordinates as [number, number]
+      placeLocationMarker(map, center)
+      const inset = overlayInset(map.getContainer(), overlayRef?.current)
+      const extent = result.properties.extent
+      // cameraForBounds rather than fitBounds: fitBounds' padding would persist on the map.
+      const camera = extent
+        ? map.cameraForBounds([extent[0], extent[3], extent[2], extent[1]], {
+            padding: { top: 60, left: 60, right: 60 + inset.right, bottom: 60 + inset.bottom },
+            maxZoom: 17,
+          })
+        : undefined
+      if (camera) map.flyTo({ center: camera.center, zoom: camera.zoom })
+      else map.flyTo({ center, zoom: Math.max(map.getZoom(), 16), offset: insetOffset(inset) })
+    },
+    clearLocation: () => locationMarkerRef.current?.remove(),
+  }))
 
   useEffect(() => {
     const map = new maplibregl.Map({
@@ -69,7 +139,7 @@ export function PlacesMap({ places, selectedId, onSelect, tagColors, overlayRef 
       if (!f || f.geometry.type !== 'Point') return
       const source = map.getSource<maplibregl.GeoJSONSource>(SOURCE_ID)!
       const zoom = await source.getClusterExpansionZoom(f.properties.cluster_id)
-      viewBeforeSelectRef.current = null
+      viewBeforeDrawerRef.current = null
       map.easeTo({ center: f.geometry.coordinates as [number, number], zoom })
     })
 
@@ -84,7 +154,7 @@ export function PlacesMap({ places, selectedId, onSelect, tagColors, overlayRef 
 
     // Only user gestures (drag, scroll, zoom buttons) carry an originalEvent.
     map.on('movestart', (e) => {
-      if (e.originalEvent) viewBeforeSelectRef.current = null
+      if (e.originalEvent) viewBeforeDrawerRef.current = null
     })
 
     for (const layer of ['clusters', 'place-points']) {
@@ -103,29 +173,32 @@ export function PlacesMap({ places, selectedId, onSelect, tagColors, overlayRef 
     mapRef.current?.getSource<maplibregl.GeoJSONSource>(SOURCE_ID)?.setData(toMapData(places))
   }, [places])
 
+  // Declared before the selection effect so the view is saved before centring on a place.
   useEffect(() => {
-    const previousId = selectedIdRef.current
+    const wasOpen = drawerOpenRef.current
+    drawerOpenRef.current = drawerOpen
+    const map = mapRef.current
+    if (!map || drawerOpen === wasOpen) return
+    if (drawerOpen) {
+      viewBeforeDrawerRef.current = { center: map.getCenter(), zoom: map.getZoom() }
+    } else {
+      const view = viewBeforeDrawerRef.current
+      viewBeforeDrawerRef.current = null
+      if (view) map.easeTo(view)
+    }
+  }, [drawerOpen])
+
+  useEffect(() => {
     selectedIdRef.current = selectedId
     const map = mapRef.current
     if (map?.getLayer('place-selected')) map.setFilter('place-selected', selectedFilter(selectedId))
-    if (!map) return
-
-    if (selectedId === null) {
-      const view = viewBeforeSelectRef.current
-      viewBeforeSelectRef.current = null
-      if (previousId !== null && view) map.easeTo(view)
-      return
-    }
-    // Remember the view when the drawer opens, not when switching between places.
-    if (previousId === null) {
-      viewBeforeSelectRef.current = { center: map.getCenter(), zoom: map.getZoom() }
-    }
+    if (!map || selectedId === null) return
     const place = placesRef.current.features.find((f) => f.properties.id === selectedId)
     if (!place) return
     map.easeTo({
       center: place.geometry.coordinates as [number, number],
       // An offset rather than padding: map padding persists and would skew zooming later.
-      offset: overlayOffset(map.getContainer(), overlayRef?.current),
+      offset: insetOffset(overlayInset(map.getContainer(), overlayRef?.current)),
     })
     // Only a new selection should move the map, not later data or ref changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -209,18 +282,22 @@ function addLayers(map: maplibregl.Map) {
   })
 }
 
-// Shift that centres a point in the area left visible by a panel docked to the
-// right or bottom edge. Uses layout offsets rather than the bounding box so it's
-// correct while the panel is still sliding in.
-function overlayOffset(
-  container: HTMLElement,
-  overlay: HTMLElement | null | undefined,
-): [number, number] {
-  if (!overlay) return [0, 0]
+type Inset = { right: number; bottom: number }
+
+// How much of the map a panel docked to the right or bottom edge covers. Uses
+// layout offsets rather than the bounding box so it's correct while the panel is
+// still sliding in.
+function overlayInset(container: HTMLElement, overlay: HTMLElement | null | undefined): Inset {
+  if (!overlay) return { right: 0, bottom: 0 }
   const { clientWidth: w, clientHeight: h } = container
   const spansHeight = overlay.offsetTop <= 0 && overlay.offsetHeight >= h
-  if (spansHeight) return [-Math.max(0, w - overlay.offsetLeft) / 2, 0]
-  return [0, -Math.max(0, h - overlay.offsetTop) / 2]
+  if (spansHeight) return { right: Math.max(0, w - overlay.offsetLeft), bottom: 0 }
+  return { right: 0, bottom: Math.max(0, h - overlay.offsetTop) }
+}
+
+// Shift that centres a point in the area left visible beside the inset.
+function insetOffset({ right, bottom }: Inset): [number, number] {
+  return [-right / 2, -bottom / 2]
 }
 
 function selectedFilter(id: number | null): maplibregl.FilterSpecification {

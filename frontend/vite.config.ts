@@ -10,7 +10,8 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api': 'http://localhost:8000',
+      // Backend dev server; override with API_URL=http://localhost:PORT.
+      '/api': process.env.API_URL ?? 'http://localhost:8000',
     },
   },
 })
