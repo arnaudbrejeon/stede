@@ -4,13 +4,15 @@ type DrawerProps = {
   open: boolean
   onClose: () => void
   label: string
+  // Visual flavour: 'adding' tints it like the add-a-place button.
+  variant?: 'adding'
   children?: ReactNode
   ref?: Ref<HTMLElement>
 }
 
 // Slides up from the bottom on small portrait screens and in from the right
 // otherwise; the placement is handled entirely in CSS.
-export function Drawer({ open, onClose, label, children, ref }: DrawerProps) {
+export function Drawer({ open, onClose, label, variant, children, ref }: DrawerProps) {
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -21,7 +23,7 @@ export function Drawer({ open, onClose, label, children, ref }: DrawerProps) {
   return (
     <aside
       ref={ref}
-      className={`drawer${open ? ' open' : ''}`}
+      className={`drawer${open ? ' open' : ''}${variant ? ` ${variant}` : ''}`}
       aria-label={label}
       aria-hidden={!open}
       inert={!open}

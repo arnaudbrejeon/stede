@@ -87,13 +87,19 @@ function App() {
             selectedTags={selectedTags}
             onToggleTag={toggleTag}
             tagColors={tagColors}
-            shown={filtered.features.length}
-            total={SAMPLE_PLACES.features.length}
           />
         )}
         {!searching && (
-          <button type="button" className="add-place" onClick={openSearch}>
-            <span aria-hidden="true">+</span> Add a place
+          <button
+            type="button"
+            className="add-place"
+            aria-label="Add a place"
+            title="Add a place"
+            onClick={openSearch}
+          >
+            <svg viewBox="0 0 20 20" width="22" height="22" aria-hidden="true">
+              <path d="M10 3.5v13M3.5 10h13" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+            </svg>
           </button>
         )}
         <Drawer
@@ -101,6 +107,7 @@ function App() {
           open={drawerOpen}
           onClose={closeDrawer}
           label={searching ? 'Add a place' : 'Place details'}
+          variant={searching ? 'adding' : undefined}
         >
           {searching ? (
             <AddPlaceSearch

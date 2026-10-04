@@ -9,6 +9,8 @@
   --rubric: #b8321f; /* the one accent: focus and selection */
   --lapis: #2b4fb8; /* links */
   --gold: #e5b320; /* decoration only; too light for text */
+  --action: var(--rubric); /* adding a place: the "+" button and the candidate pin */
+  --action-panel: color-mix(in srgb, var(--action) 6%, var(--panel)); /* its drawer */
   --shadow: 43, 36, 29; /* ink as r, g, b for translucent shadows */
   --cluster: var(--ink);
   --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -188,11 +190,52 @@ body,
   outline: 2px solid var(--rubric);
   outline-offset: 1px;
 }
+.fold {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 4px 2px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.fold:hover {
+  background: var(--hover);
+}
+.fold:focus-visible {
+  outline: 2px solid var(--rubric);
+}
+.fold-chevron {
+  flex: none;
+  transition: transform 150ms ease;
+}
+.fold[aria-expanded='true'] .fold-chevron {
+  transform: rotate(90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .fold-chevron {
+    transition: none;
+  }
+}
+.fold-note {
+  color: var(--muted);
+  font-size: 13px;
+}
 .chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 10px;
+  margin-top: 6px;
+}
+.chips[hidden] {
+  display: none;
 }
 .chip,
 .drawer-tags li {
@@ -218,11 +261,6 @@ body,
 /* Keep the swatch legible against the dark pressed chip. */
 .chip[aria-pressed='true'] .swatch {
   box-shadow: 0 0 0 1.5px var(--panel);
-}
-.count {
-  margin: 10px 0 0;
-  font-size: 13px;
-  color: var(--muted);
 }
 
 .app {
@@ -296,35 +334,38 @@ body,
   right: var(--drawer-width);
 }
 .app.drawer-open .add-place {
-  right: calc(var(--drawer-width) + 12px);
+  /* Centred in the map area left beside the side drawer. */
+  left: calc((100% - var(--drawer-width)) / 2);
 }
 @media (orientation: portrait) and (max-width: 640px) {
   .app.drawer-open .maplibregl-ctrl-top-right,
   .app.drawer-open .maplibregl-ctrl-bottom-right {
     right: 0;
   }
+  .app.drawer-open .add-place {
+    left: 50%;
+  }
 }
 
 .add-place {
   position: absolute;
   z-index: 1;
-  right: 12px;
-  /* Clear of the map attribution in the corner. */
+  left: 50%;
+  /* Clear of the map attribution along the bottom edge. */
   bottom: 40px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 16px;
-  font: inherit;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--panel);
-  background: var(--ink);
+  transform: translateX(-50%);
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  color: #fff;
+  background: var(--action);
   border: 0;
-  border-radius: 999px;
+  border-radius: 50%;
   box-shadow: 0 4px 14px rgba(var(--shadow), 0.3);
   cursor: pointer;
-  transition: right var(--drawer-duration) ease;
+  transition: left var(--drawer-duration) ease;
 }
 /* The attribution wraps to two lines on narrow screens. */
 @media (max-width: 640px) {
@@ -332,12 +373,8 @@ body,
     bottom: 60px;
   }
 }
-.add-place span {
-  font-size: 20px;
-  line-height: 1;
-}
 .add-place:focus-visible {
-  outline: 2px solid var(--rubric);
+  outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
 
@@ -357,6 +394,9 @@ body,
   transition:
     transform var(--drawer-duration) ease,
     visibility 0s linear var(--drawer-duration);
+}
+.drawer.adding {
+  background: var(--action-panel);
 }
 .drawer.open {
   transform: none;
@@ -390,7 +430,7 @@ body,
   inset: 0;
   display: grid;
   place-items: center;
-  background: var(--ink);
+  background: var(--action);
   border: 4.5px solid #fff;
   border-radius: 50%;
   box-shadow: 0 2px 8px rgba(var(--shadow), 0.35);
@@ -399,7 +439,7 @@ body,
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  background: var(--ink);
+  background: var(--action);
   opacity: 0;
   animation: search-pin-pulse 1.8s ease-out infinite;
 }

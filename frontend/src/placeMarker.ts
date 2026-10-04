@@ -23,8 +23,8 @@ const ICON_GRID = 24 // place icons are drawn on a 24×24 grid
 // Iron-gall ink, as --ink in index.css (canvas and map layers can't read CSS).
 export const INK = '#2b241d'
 
-// Search candidate: the inverse of a saved place (ink disc, white "+", same white
-// outline) with a pulsing halo, so it never reads as one of your places. An HTML
+// Search candidate: the inverse of a saved place (--action disc, white "+", same
+// white outline) with a pulsing halo, so it never reads as one of your places. An HTML
 // element rather than a map image so the halo can animate in CSS; styled in index.css.
 export function createSearchPinElement(): HTMLElement {
   const pin = document.createElement('div')
