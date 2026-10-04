@@ -3,7 +3,13 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { useEffect, useImperativeHandle, useRef, type Ref, type RefObject } from 'react'
 import type { GeocodeResult, MapView } from '../geocoder'
-import { drawMarker, isMarkerImageId, MARKER_RADIUS, markerImageId } from '../placeMarker'
+import {
+  createSearchPinElement,
+  drawMarker,
+  isMarkerImageId,
+  MARKER_RADIUS,
+  markerImageId,
+} from '../placeMarker'
 import type { Places } from '../places'
 import type { TagColors } from '../tags'
 
@@ -59,7 +65,7 @@ export function PlacesMap({
   const locationMarkerRef = useRef<maplibregl.Marker | null>(null)
 
   const placeLocationMarker = (map: maplibregl.Map, center: [number, number]) => {
-    locationMarkerRef.current ??= new maplibregl.Marker({ color: '#1d2733' })
+    locationMarkerRef.current ??= new maplibregl.Marker({ element: createSearchPinElement() })
     locationMarkerRef.current.setLngLat(center).addTo(map)
   }
 

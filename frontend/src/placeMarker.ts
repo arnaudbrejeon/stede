@@ -23,6 +23,23 @@ const ICON_PATH = 'M12 3.5 3.5 10.6V20.5h6v-6h5v6h6v-9.9z'
 const ICON_VIEWBOX = 24
 const ICON_COLOR = '#1d2733'
 
+// Search candidate: the inverse of a saved place (ink disc, white "+", same white
+// outline) with a pulsing halo, so it never reads as one of your places. An HTML
+// element rather than a map image so the halo can animate in CSS; styled in index.css.
+export function createSearchPinElement(): HTMLElement {
+  const pin = document.createElement('div')
+  pin.className = 'search-pin'
+  // Same size as a saved place's marker.
+  pin.style.width = pin.style.height = `${MARKER_RADIUS * 2}px`
+  pin.innerHTML =
+    '<span class="search-pin-halo"></span>' +
+    '<span class="search-pin-disc">' +
+    '<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">' +
+    '<path d="M10 3.5v13M3.5 10h13" stroke="#fff" stroke-width="3" stroke-linecap="round"/>' +
+    '</svg></span>'
+  return pin
+}
+
 // White disc with the icon in the middle, ringed by one equal arc per tag.
 export function drawMarker(id: string, colors: TagColors, pixelRatio: number): ImageData {
   const body = id.slice(PREFIX.length)
