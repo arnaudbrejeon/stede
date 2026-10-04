@@ -3,7 +3,7 @@ import { ICON_CATEGORIES, PLACE_ICONS, type PlaceIcon } from '../placeIcons'
 import { MARKER_RADIUS } from '../placeMarker'
 import { TAG_PALETTE } from '../tags'
 
-const INK = '#1d2733'
+const INK = '#2b241d'
 const OUTLINE = 4.5
 const RING = 5.25
 const ICON_SIZE = 19.5
@@ -22,7 +22,7 @@ function Glyph({ icon, size }: { icon: PlaceIcon; size: number }) {
 }
 
 // Mirrors drawMarker: white disc, tag-coloured ring, icon in the middle.
-function Pin({ icon, colors }: { icon: PlaceIcon; colors: string[] }) {
+export function Pin({ icon, colors, ink = INK }: { icon: PlaceIcon; colors: string[]; ink?: string }) {
   const r = MARKER_RADIUS
   const ringR = r - OUTLINE - RING / 2
   const step = 360 / colors.length
@@ -43,7 +43,7 @@ function Pin({ icon, colors }: { icon: PlaceIcon; colors: string[] }) {
       )}
       <g transform={`translate(${r - ICON_SIZE / 2} ${r - ICON_SIZE / 2}) scale(${s})`}>
         {icon.fill.map((d, i) => (
-          <path key={i} d={d} fill={INK} />
+          <path key={i} d={d} fill={ink} />
         ))}
         {icon.holes.map((d, i) => (
           <path key={`h${i}`} d={d} fill="#fff" />

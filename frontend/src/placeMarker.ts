@@ -20,7 +20,8 @@ const RING = 5.25 // tag-coloured band
 const ICON_SIZE = 19.5
 
 const ICON_GRID = 24 // place icons are drawn on a 24×24 grid
-const ICON_COLOR = '#1d2733'
+// Iron-gall ink, as --ink in index.css (canvas and map layers can't read CSS).
+export const INK = '#2b241d'
 
 // Search candidate: the inverse of a saved place (ink disc, white "+", same white
 // outline) with a pulsing halo, so it never reads as one of your places. An HTML
@@ -73,7 +74,7 @@ export function drawMarker(id: string, colors: TagColors, pixelRatio: number): I
   ctx.translate(c - ICON_SIZE / 2, c - ICON_SIZE / 2)
   ctx.scale(scale, scale)
   // Shapes are filled one by one so overlaps never cancel; holes are cut in white.
-  ctx.fillStyle = ICON_COLOR
+  ctx.fillStyle = INK
   for (const d of icon.fill) ctx.fill(new Path2D(d))
   ctx.fillStyle = '#fff'
   for (const d of icon.holes) ctx.fill(new Path2D(d))

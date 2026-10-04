@@ -1,11 +1,11 @@
 import * as maplibregl from 'maplibre-gl'
-import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
-import 'maplibre-gl/dist/maplibre-gl.css'
 import { useEffect, useImperativeHandle, useRef, type Ref, type RefObject } from 'react'
 import type { GeocodeResult, MapView } from '../geocoder'
+import { BASE_STYLE_URL, flattenStyle, tintStyle, VELLUM_MAP_COLORS } from '../mapStyle'
 import {
   createSearchPinElement,
   drawMarker,
+  INK,
   isMarkerImageId,
   MARKER_RADIUS,
   markerImageId,
@@ -14,11 +14,6 @@ import { placeIcon } from '../placeIconChoice'
 import type { Places } from '../places'
 import type { TagColors } from '../tags'
 
-// maplibre-gl locates its worker next to its own module, which breaks once Vite
-// bundles it; point it at a worker Vite builds and serves itself.
-maplibregl.setWorkerUrl(workerUrl)
-
-const OPENFREEMAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty'
 const SOURCE_ID = 'places'
 
 export type PlacesMapHandle = {
@@ -114,9 +109,12 @@ export function PlacesMap({
   useEffect(() => {
     const map = new maplibregl.Map({
       container: containerRef.current!,
-      style: OPENFREEMAP_STYLE,
       center: [2.345, 48.86],
       zoom: 13,
+    })
+    // Filtered and tinted as the style arrives, so the original is never drawn.
+    map.setStyle(BASE_STYLE_URL, {
+      transformStyle: (_previous, next) => tintStyle(flattenStyle(next), VELLUM_MAP_COLORS),
     })
     mapRef.current = map
     map.addControl(new maplibregl.NavigationControl(), 'top-right')
@@ -254,7 +252,7 @@ function addLayers(map: maplibregl.Map) {
     source: SOURCE_ID,
     filter: selectedFilter(null),
     paint: {
-      'circle-color': '#1d2733',
+      'circle-color': INK,
       'circle-radius': MARKER_RADIUS + 3,
     },
   })
@@ -285,7 +283,7 @@ function addLayers(map: maplibregl.Map) {
       'text-offset': [0, (MARKER_RADIUS + 3) / 12],
       'text-anchor': 'top',
     },
-    paint: { 'text-color': '#1d2733', 'text-halo-color': '#fff', 'text-halo-width': 1.5 },
+    paint: { 'text-color': INK, 'text-halo-color': '#fffcf5', 'text-halo-width': 1.5 },
   })
 }
 

@@ -1,23 +1,24 @@
-// Tag colours: each hue pushed to near its maximum sRGB saturation (OKLCH), with
-// lightness moved toward where that hue is most vivid; navy and brown keep their
-// darkness, which is what separates them from blue and orange. No 14-colour set
-// stays distinguishable (validator: red/orange ΔE 8.9, olive/green ΔE 0.9 protan),
-// so tag names are always shown next to colours (chips, drawer).
+// Tag colours: medieval pigments as they looked when new, anchored on gold leaf
+// and kept just short of the screen's maximum saturation so they read as paint,
+// not neon. Light and dark pigments alternate so similar hues still differ in
+// lightness. No 14-colour set stays fully distinguishable (closest pair ΔE 11.2;
+// worst for colour-blind viewers 3.4), so tag names are always shown next to
+// colours (chips, drawer). See docs/palette.md.
 export const TAG_PALETTE = [
-  '#167ded', // blue
-  '#f8601a', // orange
-  '#25c58b', // aqua
-  '#f2a613', // yellow
-  '#fb4c9a', // magenta
-  '#1eb11b', // green
-  '#601df7', // violet
-  '#f82032', // red
-  '#94560f', // brown
-  '#1fa7b3', // teal
-  '#d51dba', // plum
-  '#97ac1e', // olive
-  '#c93bfa', // lavender
-  '#053894', // navy
+  '#3351ed', // lapis ultramarine
+  '#f8701c', // red lead
+  '#19b7a1', // verdigris
+  '#e5b320', // gold leaf
+  '#f44488', // madder rose
+  '#189152', // malachite
+  '#8c25bb', // folium purple
+  '#ea241c', // vermilion
+  '#864311', // burnt sienna
+  '#006b6e', // terre verte
+  '#8f185f', // murex
+  '#889a19', // sap green
+  '#ba8cec', // woad lilac
+  '#053ca4', // azurite
 ]
 export const UNTAGGED_COLOR = '#7a8794'
 
