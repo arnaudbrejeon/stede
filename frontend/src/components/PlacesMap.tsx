@@ -10,6 +10,7 @@ import {
   MARKER_RADIUS,
   markerImageId,
 } from '../placeMarker'
+import { placeIcon } from '../placeIconChoice'
 import type { Places } from '../places'
 import type { TagColors } from '../tags'
 
@@ -314,9 +315,9 @@ function selectedFilter(id: number | null): maplibregl.FilterSpecification {
 function toMapData(places: Places): Places {
   return {
     ...places,
-    features: places.features.map((f) => ({
-      ...f,
-      properties: { ...f.properties, marker: markerImageId(f.properties.tags) },
-    })),
+    features: places.features.map((f) => {
+      const icon = placeIcon(f.properties.icon, f.properties.category)
+      return { ...f, properties: { ...f.properties, marker: markerImageId(icon, f.properties.tags) } }
+    }),
   }
 }

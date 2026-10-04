@@ -4,6 +4,12 @@ import { defineConfig } from 'vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      // icons.html is a dev-only preview of the place icon set; ship just the app.
+      input: 'index.html',
+    },
+  },
   worker: {
     // maplibre-gl starts its worker as a module worker.
     format: 'es',

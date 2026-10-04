@@ -1,11 +1,15 @@
 import type { Feature, FeatureCollection, Point } from 'geojson'
+import type { PlaceIconKey } from './placeIcons'
 
 export type PlaceProperties = {
   id: number
   name: string
+  // OSM-style value (restaurant, museum…); picks the default icon.
   category: string
   tags: string[]
   website: string | null
+  // Icon chosen for this place, overriding its category's default.
+  icon?: PlaceIconKey
 }
 
 export type Place = Feature<Point, PlaceProperties>
