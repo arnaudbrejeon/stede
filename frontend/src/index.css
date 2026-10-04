@@ -1,111 +1,274 @@
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
-
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
-
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
+  --ink: #1d2733;
+  --muted: #5d6b7a;
+  --panel: #ffffff;
+  --line: #dde3ea;
+  --cluster: #1d2733;
+  --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
-}
-
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
+* {
   box-sizing: border-box;
 }
-
-body {
+html,
+body,
+#root {
   margin: 0;
+  height: 100%;
+  font-family: var(--font);
+  color: var(--ink);
 }
 
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
+/* Doubled class so this beats maplibre-gl.css's `.maplibregl-map { position: relative }`,
+   which loads later and would otherwise collapse the container to zero height. */
+.map.map {
+  position: absolute;
+  inset: 0;
 }
 
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
+.panel {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 1;
+  width: min(320px, calc(100% - 24px));
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 2px 12px rgba(29, 39, 51, 0.12);
 }
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
-p {
-  margin: 0;
-}
-
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
-}
-
-code {
+.panel input {
+  width: 100%;
+  padding: 8px 10px;
+  font: inherit;
   font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.panel input:focus-visible,
+.chip:focus-visible {
+  outline: 2px solid #1f6fb2;
+  outline-offset: 1px;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.chip,
+.drawer-tags li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.chip {
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 10px;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+}
+.chip[aria-pressed='true'] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+/* Keep the swatch legible against the dark pressed chip. */
+.chip[aria-pressed='true'] .swatch {
+  box-shadow: 0 0 0 1.5px #fff;
+}
+.count {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.app {
+  --drawer-width: min(380px, 90vw);
+  --drawer-duration: 220ms;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 52px;
+  flex: none;
+  padding: 0 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  /* Above the map and its drawer, so their shadows fall underneath it. */
+  position: relative;
+  z-index: 3;
+}
+.header-name {
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+.header-quote {
+  margin-left: auto;
+  padding-left: 24px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--muted);
+}
+/* No room beside the name on narrow screens. */
+@media (max-width: 720px) {
+  .header-quote {
+    display: none;
+  }
+}
+
+/* Everything laid over the map is positioned against this. */
+.main {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Keep the map's right-hand controls clear of the side drawer. */
+.app .maplibregl-ctrl-top-right,
+.app .maplibregl-ctrl-bottom-right {
+  transition: right var(--drawer-duration) ease;
+}
+.app.drawer-open .maplibregl-ctrl-top-right,
+.app.drawer-open .maplibregl-ctrl-bottom-right {
+  right: var(--drawer-width);
+}
+@media (orientation: portrait) and (max-width: 640px) {
+  .app.drawer-open .maplibregl-ctrl-top-right,
+  .app.drawer-open .maplibregl-ctrl-bottom-right {
+    right: 0;
+  }
+}
+
+.drawer {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--drawer-width);
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  box-shadow: -4px 0 16px rgba(29, 39, 51, 0.12);
+  overflow-y: auto;
+  transform: translateX(100%);
+  visibility: hidden;
+  transition:
+    transform var(--drawer-duration) ease,
+    visibility 0s linear var(--drawer-duration);
+}
+.drawer.open {
+  transform: none;
+  visibility: visible;
+  transition: transform var(--drawer-duration) ease;
+}
+
+/* Small portrait screens: bottom sheet */
+@media (orientation: portrait) and (max-width: 640px) {
+  .drawer {
+    top: auto;
+    left: 0;
+    width: auto;
+    max-height: 60vh;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    border-radius: 14px 14px 0 0;
+    box-shadow: 0 -4px 16px rgba(29, 39, 51, 0.12);
+    transform: translateY(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app {
+    --drawer-duration: 0ms;
+  }
+}
+
+.drawer-handle {
+  display: none;
+}
+@media (orientation: portrait) and (max-width: 640px) {
+  .drawer-handle {
+    display: block;
+    width: 36px;
+    height: 4px;
+    margin: 8px auto 0;
+    border-radius: 2px;
+    background: var(--line);
+  }
+}
+
+.drawer-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  font: inherit;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.drawer-close:hover {
+  background: #f1f4f7;
+}
+.drawer-close:focus-visible {
+  outline: 2px solid #1f6fb2;
+}
+
+.drawer-body {
+  padding: 16px 20px 24px;
+}
+.drawer-body h2 {
+  margin: 0 36px 4px 0;
+  font-size: 20px;
+}
+.drawer-category {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: var(--muted);
+  text-transform: capitalize;
+}
+.swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.drawer-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+.drawer-tags li {
+  font-size: 13px;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+.drawer-body a {
+  font-size: 14px;
+  color: #1f6fb2;
 }
