@@ -16,6 +16,7 @@ export function ResultDetails({ result, onBack }: ResultDetailsProps) {
   // undefined while loading, null when the place has no image.
   const [image, setImage] = useState<PlaceImage | null | undefined>(undefined)
   const p = result.properties
+  const [lng, lat] = result.geometry.coordinates
 
   // Details and image load independently; the image lookup is the slower one.
   useEffect(() => {
@@ -26,11 +27,11 @@ export function ResultDetails({ result, onBack }: ResultDetailsProps) {
       console.error(err)
       setFailed(true)
     })
-    fetchPlaceImage(p.osm_type, p.osm_id, signal).then(setImage, () => {
+    fetchPlaceImage(p.osm_type, p.osm_id, [lng, lat], signal).then(setImage, () => {
       if (!signal.aborted) setImage(null)
     })
     return () => controller.abort()
-  }, [p.osm_type, p.osm_id])
+  }, [p.osm_type, p.osm_id, lng, lat])
 
   const imageState = image === undefined ? 'loading' : image ? 'ready' : 'none'
 
@@ -43,7 +44,7 @@ export function ResultDetails({ result, onBack }: ResultDetailsProps) {
       <figure className={`result-image ${imageState}`}>
         {image ? (
           <>
-            <img src={image.url} alt={resultTitle(p)} />
+            <img src={image.display_url} alt={resultTitle(p)} />
             <figcaption>
               <a href={image.source.href} target="_blank" rel="noopener">
                 {image.source.label}

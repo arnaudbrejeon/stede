@@ -2,11 +2,16 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Response
 
 from stede.geocoding import GeocodingError, View, search_places
-from stede.og_image import make_client
-from stede.place_image import OsmType, PlaceImageResponse, find_place_image
+from stede.place_image import (
+    OsmType,
+    PlaceImageResponse,
+    ServedPlaceImage,
+    find_place_image,
+)
+from stede.website_image import fetch_image, make_client
 
 
 @asynccontextmanager
@@ -52,13 +57,53 @@ async def search(
 
 @app.get("/api/place-image")
 async def place_image(
-    osm_type: OsmType, osm_id: int = Query(gt=0)
+    osm_type: OsmType,
+    osm_id: int = Query(gt=0),
+    lat: float | None = Query(default=None, ge=-90, le=90),
+    lon: float | None = Query(default=None, ge=-180, le=180),
 ) -> PlaceImageResponse:
-    """An image for an OpenStreetMap place, or null when none can be found."""
+    """An image for an OpenStreetMap place, or null when none can be found.
+
+    The place's location, when given, lets unlinked places be matched on Wikidata.
+    """
+    near = (lat, lon) if lat is not None and lon is not None else None
+    try:
+        image = await find_place_image(app.state.http, osm_type, osm_id, near)
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502, detail="place lookup is unavailable"
+        ) from exc
+    if image is None:
+        return PlaceImageResponse(image=None)
+    # Browsers load it through /api/place-image/file: third-party sites may block
+    # them (hotlink protection, bot challenges, plain http) yet answer us.
+    served = ServedPlaceImage(
+        **image.model_dump(),
+        display_url=f"/api/place-image/file?osm_type={osm_type}&osm_id={osm_id}",
+    )
+    return PlaceImageResponse(image=served)
+
+
+@app.get("/api/place-image/file")
+async def place_image_file(osm_type: OsmType, osm_id: int = Query(gt=0)) -> Response:
+    """The image found for a place, fetched and served by us.
+
+    Only ever serves the image the lookup chose, never an arbitrary URL.
+    """
     try:
         image = await find_place_image(app.state.http, osm_type, osm_id)
     except httpx.HTTPError as exc:
         raise HTTPException(
             status_code=502, detail="place lookup is unavailable"
         ) from exc
-    return PlaceImageResponse(image=image)
+    if image is None:
+        raise HTTPException(status_code=404, detail="no image for this place")
+    fetched = await fetch_image(image.url, app.state.http)
+    if fetched is None:
+        raise HTTPException(status_code=502, detail="image is unavailable")
+    body, media_type = fetched
+    return Response(
+        content=body,
+        media_type=media_type,
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
