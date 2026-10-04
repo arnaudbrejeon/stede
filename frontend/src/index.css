@@ -104,6 +104,14 @@ body,
   border-radius: 8px;
   background: var(--hover);
 }
+/* Bottom sheet: a short banner, so the name and details stay in view. The image
+   is cropped to fill it (object-fit: cover). */
+@media (orientation: portrait) and (max-width: 640px) {
+  .result-image {
+    aspect-ratio: auto;
+    height: clamp(96px, 20vh, 150px);
+  }
+}
 .result-image.loading {
   animation: pulse 1.2s ease-in-out infinite;
 }
