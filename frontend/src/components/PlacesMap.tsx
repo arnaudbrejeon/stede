@@ -111,13 +111,55 @@ export function PlacesMap({
       container: containerRef.current!,
       center: [2.345, 48.86],
       zoom: 13,
+      // Always north-up and flat: rotating or tilting a map of places only happens
+      // by accident (a two-finger twist), and there'd be no compass to undo it.
+      dragRotate: false,
+      pitchWithRotate: false,
+      touchPitch: false,
+      maxPitch: 0,
     })
+    map.touchZoomRotate.disableRotation()
+    map.keyboard.disableRotation()
     // Filtered and tinted as the style arrives, so the original is never drawn.
     map.setStyle(BASE_STYLE_URL, {
       transformStyle: (_previous, next) => tintStyle(flattenStyle(next), VELLUM_MAP_COLORS),
     })
     mapRef.current = map
-    map.addControl(new maplibregl.NavigationControl(), 'top-right')
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
+    // Shows where you are and centres the map on you; one-off, not following.
+    const geolocate = new maplibregl.GeolocateControl({
+      positionOptions: { enableHighAccuracy: true, timeout: 10_000 },
+      fitBoundsOptions: { maxZoom: 15 },
+    })
+    map.addControl(geolocate, 'top-right')
+    // Open where you are when the browser will say (it asks the first time;
+    // only over HTTPS or on localhost). Until then, and otherwise, the default view.
+    let userMoved = false
+    const noteUserMove = (e: { originalEvent?: unknown }) => {
+      if (e.originalEvent) userMoved = true
+    }
+    map.on('movestart', noteUserMove)
+    if (window.isSecureContext && 'geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => {
+          map.off('movestart', noteUserMove)
+          // Never yank the map away from what you've started looking at.
+          if (userMoved || selectedIdRef.current !== null || !mapRef.current) return
+          map.jumpTo({ center: [coords.longitude, coords.latitude], zoom: 14 })
+          // Same spot, so it just adds your position marker.
+          geolocate.trigger()
+        },
+        () => map.off('movestart', noteUserMove),
+        { timeout: 10_000, maximumAge: 5 * 60_000 },
+      )
+    }
+    // MapLibre shows the attribution open until the first drag. On narrow screens
+    // (as in index.css) that's under the add-place button, so fold it into its
+    // (i) button once the map is drawn; a tap still opens it.
+    map.once('idle', () => {
+      if (!window.matchMedia('(max-width: 640px)').matches) return
+      map.getContainer().querySelector('.maplibregl-compact-show')?.classList.remove('maplibregl-compact-show')
+    })
 
     map.on('load', () => {
       map.addSource(SOURCE_ID, {

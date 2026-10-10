@@ -4,6 +4,8 @@ import { tagColor, type TagColors } from '../tags'
 
 // A folded line shows this many of its tags, then "+N".
 const SUMMARY_TAGS = 3
+// Where the panel starts folded into a button, as on phones (matches index.css).
+const NARROW_SCREEN = '(max-width: 640px)'
 
 type FilterPanelProps = {
   query: string
@@ -26,7 +28,10 @@ export function FilterPanel({
   // At most one line is open, so a long tag list never stacks on another.
   // Lines start folded so the panel stays small over the map.
   const [openLine, setOpenLine] = useState<number | null>(null)
+  // On phones the panel would cover much of the map, so it starts as a button.
+  const [expanded, setExpanded] = useState(() => !window.matchMedia(NARROW_SCREEN).matches)
   const baseId = useId()
+  const activeFilters = (query.trim() ? 1 : 0) + tagLines.filter((line) => line.size > 0).length
 
   const toggleTag = (index: number, tag: string) => {
     const line = new Set(tagLines[index])
@@ -44,15 +49,45 @@ export function FilterPanel({
     setOpenLine((open) => (open === null || open < index ? open : open === index ? null : open - 1))
   }
 
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        className="panel-toggle"
+        aria-expanded={false}
+        aria-label={activeFilters > 0 ? `Filters, ${activeFilters} active` : 'Filters'}
+        onClick={() => setExpanded(true)}
+      >
+        <FilterIcon />
+        Filter
+        {activeFilters > 0 && <span className="panel-toggle-count">{activeFilters}</span>}
+      </button>
+    )
+  }
+
   return (
     <div className="panel">
-      <input
-        type="search"
-        placeholder="Filter by name"
-        aria-label="Filter places by name"
-        value={query}
-        onChange={(e) => onQueryChange(e.target.value)}
-      />
+      <div className="panel-top">
+        <input
+          type="search"
+          placeholder="Filter by name"
+          aria-label="Filter places by name"
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+        />
+        <button
+          type="button"
+          className="panel-fold"
+          aria-expanded={true}
+          aria-label="Hide filters"
+          title="Hide filters"
+          onClick={() => setExpanded(false)}
+        >
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path d="M3.5 10.5 8 6l4.5 4.5" fill="none" stroke="currentColor" strokeWidth="2" />
+          </svg>
+        </button>
+      </div>
       {tagLines.map((line, index) => {
         const open = openLine === index
         const chipsId = `${baseId}-${index}`
@@ -130,5 +165,13 @@ export function FilterPanel({
         </button>
       )}
     </div>
+  )
+}
+
+function FilterIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+      <path d="M2 3.5h12L9.5 8.8V13l-3-1.5V8.8Z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+    </svg>
   )
 }

@@ -8,6 +8,7 @@ import { PlacesMap, type PlacesMapHandle } from './components/PlacesMap'
 import type { GeocodeResult } from './geocoder'
 import { allTags, fetchPlaces, filterPlaces, NO_PLACES, type Places, type TagLine } from './places'
 import { buildTagColors } from './tags'
+import { useHiddenBottom } from './useHiddenBottom'
 
 function App() {
   const [places, setPlaces] = useState<Places>(NO_PLACES)
@@ -16,8 +17,10 @@ function App() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   // Browsing your places is the default; searching for a new one is opt-in.
   const [searching, setSearching] = useState(false)
+  const appRef = useRef<HTMLDivElement>(null)
   const drawerRef = useRef<HTMLElement>(null)
   const mapRef = useRef<PlacesMapHandle>(null)
+  useHiddenBottom(appRef)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -70,7 +73,7 @@ function App() {
   )
 
   return (
-    <div className={`app${drawerOpen ? ' drawer-open' : ''}`}>
+    <div ref={appRef} className={`app${drawerOpen ? ' drawer-open' : ''}`}>
       <Header />
       <main className="main">
         <PlacesMap

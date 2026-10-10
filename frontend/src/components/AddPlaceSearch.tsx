@@ -41,9 +41,12 @@ export function AddPlaceSearch({ getView, onPick, onPreview }: AddPlaceSearchPro
   const inputRef = useRef<HTMLInputElement>(null)
   const listId = useId()
 
+  // Ready to type with a physical keyboard. On touch screens focusing would pop
+  // up the on-screen keyboard over the sheet, so there you tap the field first.
   // Focus without scrolling: the drawer is still sliding in, and a plain focus
   // (or autoFocus) can scroll its container to reveal the field, shifting the map.
   useEffect(() => {
+    if (window.matchMedia('(hover: none) and (pointer: coarse)').matches) return
     inputRef.current?.focus({ preventScroll: true })
   }, [])
 
