@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 *.local
+# Local HTTPS certificate for npm run dev:lan (mkcert)
+.cert
 
 # Editor directories and files
 .vscode/*
