@@ -4,9 +4,13 @@ Each icon is built from simple shapes. `fill` shapes are painted in ink, then
 `holes` are painted in the pin's white to cut details (doors, text lines). Kept
 as separate paths so overlapping shapes never cancel out.
 
+Also writes src/placeIconCategories.json, the same OSM value → category →
+default icon mapping, for the backend's scripts/assign_icons.py.
+
 Run: python3 scripts/place_icons.py
 """
 
+import json
 import math
 import re
 from pathlib import Path
@@ -334,7 +338,34 @@ icon(
     ],
     holes=[rect(7, 18, 2.2, 1.4, 0.7), rect(10.9, 18, 2.2, 1.4, 0.7), rect(14.8, 18, 2.2, 1.4, 0.7)],
 )
-# 12 Home & other
+# 12 Travel & roads
+icon(
+    "carriage", "Covered wagon", "Travel & roads",
+    fill=[
+        # Canvas hood over the bed, then two spoked wheels.
+        "M3.4 13.4V9.6C3.4 5.8 7.2 3.2 12 3.2S20.6 5.8 20.6 9.6V13.4Z",
+        rect(1.8, 12.8, 20.4, 2.6, 0.6),
+        circle(6.6, 18.4, 3.6), circle(17.4, 18.4, 3.6),
+    ],
+    holes=[
+        # Hoops showing through the canvas.
+        rect(7.4, 6, 1.4, 6.8, 0.7), rect(11.3, 4.6, 1.4, 8.2, 0.7), rect(15.2, 6, 1.4, 6.8, 0.7),
+        ring(6.6, 18.4, 2.3, 1.1), ring(17.4, 18.4, 2.3, 1.1),
+    ],
+)
+icon(
+    "horse", "Horse's head", "Travel & roads",
+    fill=[
+        # Head and neck facing left, ear up, cut off square at the chest.
+        "M7.6 21.8 8.8 15.8C7 15.2 4.8 14.8 3.8 13.4 3 12.2 3.4 10.8 4.6 10.2L9.2 7.2 9.8 2.4 12 5C17 5.2 20.4 9 20.4 14.6V21.8Z",
+    ],
+    holes=[
+        circle(10.4, 9, 0.9),
+        # Nostril.
+        circle(5.4, 11.8, 0.6),
+    ],
+)
+# 13 Home & other
 icon(
     "cottage", "Thatched cottage", "Home & other",
     fill=[
@@ -371,9 +402,45 @@ CATEGORIES = [
     ("park", "Park & nature", ["oak", "fleur-de-lis"]),
     ("sport", "Sport & leisure", ["shield", "crossed-lances"]),
     ("music", "Music & shows", ["lute", "jester-cap"]),
+    ("travel", "Travel & roads", ["carriage", "horse"]),
     ("other", "Home & other", ["lantern", "cottage"]),
 ]
+
+# Which category an OpenStreetMap-style value belongs to. Values are matched
+# first (a "restaurant" is food whatever its key), then whole keys (any shop);
+# anything else is "other".
+OSM_VALUES = {
+    "restaurant": ["restaurant", "fast_food", "food_court"],
+    "cafe": ["cafe", "bakery", "pastry", "ice_cream", "confectionery", "tea", "coffee"],
+    "bar": ["bar", "pub", "biergarten", "wine", "alcohol"],
+    "museum": ["museum", "gallery", "artwork", "arts_centre"],
+    "monument": ["attraction", "monument", "memorial", "castle", "ruins", "archaeological_site", "tower"],
+    "worship": ["place_of_worship", "church", "cathedral", "chapel", "monastery"],
+    "lodging": ["hotel", "guest_house", "hostel", "motel", "camp_site", "chalet", "apartment"],
+    "shop": [
+        "marketplace", "mall", "supermarket", "deli", "clothes", "gift", "jewelry", "electronics",
+        "garden_centre", "farm",
+    ],
+    "park": ["park", "garden", "nature_reserve", "wood", "forest", "beach", "peak", "viewpoint", "trailhead", "zoo"],
+    "sport": [
+        "sports_centre", "pitch", "stadium", "fitness_centre", "swimming_pool", "golf_course", "horse_riding",
+        "theme_park",
+    ],
+    "music": ["theatre", "cinema", "nightclub", "music_venue", "concert_hall"],
+    "travel": [
+        "road", "car_rental", "driving_school", "parking", "rest_area", "services", "fuel", "charging_station",
+        "station", "bus_station", "aerodrome", "ferry_terminal",
+    ],
+}
+OSM_KEYS = {"shop": "shop", "historic": "monument", "natural": "park", "sport": "sport"}
 assert {i for _, _, icons in CATEGORIES for i in icons} == set(ICONS), "every icon in one category"
+CATEGORY_KEYS = {key for key, _, _ in CATEGORIES}
+assert set(OSM_VALUES) | set(OSM_KEYS.values()) <= CATEGORY_KEYS, "OSM values map to known categories"
+VALUE_CATEGORIES = {}
+for category, values in OSM_VALUES.items():
+    for value in values:
+        assert value not in VALUE_CATEGORIES, f"{value} is in two categories"
+        VALUE_CATEGORIES[value] = category
 
 
 # --- Output ------------------------------------------------------------------
@@ -412,7 +479,27 @@ lines += [
     "",
     "export type IconCategoryKey = (typeof ICON_CATEGORIES)[number]['key']",
     "",
+    "// OSM-style value (restaurant, museum…) → its category. Anything unlisted is 'other'.",
+    "export const OSM_VALUE_CATEGORIES: Record<string, IconCategoryKey> = {",
+    *[f"  {value}: '{category}'," for value, category in VALUE_CATEGORIES.items()],
+    "}",
+    "",
+    "// OSM key → category, for values not listed above (any shop=* is a shop).",
+    "export const OSM_KEY_CATEGORIES: Record<string, IconCategoryKey> = {",
+    *[f"  {key}: '{category}'," for key, category in OSM_KEYS.items()],
+    "}",
+    "",
 ]
 out = Path(__file__).resolve().parent.parent / "src" / "placeIcons.ts"
 out.write_text("\n".join(lines))
 print(f"{len(ICONS)} icons -> {out}")
+
+# The same choice for the backend, which records each saved place's icon.
+mapping = {
+    "values": VALUE_CATEGORIES,
+    "keys": OSM_KEYS,
+    "defaults": {key: icons[0] for key, _, icons in CATEGORIES},
+}
+json_out = out.with_name("placeIconCategories.json")
+json_out.write_text(json.dumps(mapping, indent=2) + "\n")
+print(f"category mapping -> {json_out}")

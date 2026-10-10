@@ -233,6 +233,62 @@ body,
     transition: none;
   }
 }
+.tag-line-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+}
+.tag-line-head .fold {
+  flex: 1;
+  min-width: 0;
+  margin-top: 0;
+}
+.tag-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.tag-line-or {
+  margin: 8px 0 0 22px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--muted);
+}
+.tag-line-remove,
+.tag-line-add {
+  display: inline-flex;
+  align-items: center;
+  font: inherit;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.tag-line-remove {
+  flex: none;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+}
+.tag-line-add {
+  gap: 6px;
+  margin-top: 8px;
+  padding: 4px 6px;
+  font-size: 13px;
+}
+.tag-line-remove:hover,
+.tag-line-add:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.tag-line-remove:focus-visible,
+.tag-line-add:focus-visible {
+  outline: 2px solid var(--rubric);
+}
 .fold-note {
   color: var(--muted);
   font-size: 13px;
@@ -242,6 +298,11 @@ body,
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 6px;
+}
+.chips:not([hidden]) {
+  /* Imported collections can carry dozens of tags. */
+  max-height: 40vh;
+  overflow-y: auto;
 }
 .chips[hidden] {
   display: none;
@@ -266,6 +327,11 @@ body,
   background: var(--ink);
   border-color: var(--ink);
   color: var(--panel);
+}
+.chip-static {
+  cursor: inherit;
+  padding: 2px 8px;
+  font-size: 12px;
 }
 /* Keep the swatch legible against the dark pressed chip. */
 .chip[aria-pressed='true'] .swatch {
@@ -531,6 +597,16 @@ body,
   font-size: 14px;
   color: var(--muted);
   text-transform: capitalize;
+}
+.drawer-address {
+  margin: -6px 0 12px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.drawer-comment {
+  margin: 0 0 16px;
+  font-size: 15px;
+  font-style: italic;
 }
 .swatch {
   flex: none;

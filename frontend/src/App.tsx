@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AddPlaceSearch } from './components/AddPlaceSearch'
 import { Drawer } from './components/Drawer'
 import { FilterPanel } from './components/FilterPanel'
@@ -6,23 +6,34 @@ import { Header } from './components/Header'
 import { PlaceDetails } from './components/PlaceDetails'
 import { PlacesMap, type PlacesMapHandle } from './components/PlacesMap'
 import type { GeocodeResult } from './geocoder'
-import { allTags, filterPlaces, SAMPLE_PLACES } from './places'
+import { allTags, fetchPlaces, filterPlaces, NO_PLACES, type Places, type TagLine } from './places'
 import { buildTagColors } from './tags'
 
 function App() {
+  const [places, setPlaces] = useState<Places>(NO_PLACES)
   const [query, setQuery] = useState('')
-  const [selectedTags, setSelectedTags] = useState<ReadonlySet<string>>(new Set())
+  const [tagLines, setTagLines] = useState<TagLine[]>([new Set()])
   const [selectedId, setSelectedId] = useState<number | null>(null)
   // Browsing your places is the default; searching for a new one is opt-in.
   const [searching, setSearching] = useState(false)
   const drawerRef = useRef<HTMLElement>(null)
   const mapRef = useRef<PlacesMapHandle>(null)
 
-  const tags = useMemo(() => allTags(SAMPLE_PLACES), [])
+  useEffect(() => {
+    const controller = new AbortController()
+    fetchPlaces(controller.signal)
+      .then(setPlaces)
+      .catch((error) => {
+        if (!controller.signal.aborted) console.error(error)
+      })
+    return () => controller.abort()
+  }, [])
+
+  const tags = useMemo(() => allTags(places), [places])
   const tagColors = useMemo(() => buildTagColors(tags), [tags])
   const filtered = useMemo(
-    () => filterPlaces(SAMPLE_PLACES, query, selectedTags),
-    [query, selectedTags],
+    () => filterPlaces(places, query, tagLines),
+    [places, query, tagLines],
   )
   // Looked up in the filtered set, so the drawer closes when filters hide the place.
   const selected = searching
@@ -58,13 +69,6 @@ function App() {
     [],
   )
 
-  const toggleTag = (tag: string) =>
-    setSelectedTags((prev) => {
-      const next = new Set(prev)
-      if (!next.delete(tag)) next.add(tag)
-      return next
-    })
-
   return (
     <div className={`app${drawerOpen ? ' drawer-open' : ''}`}>
       <Header />
@@ -75,7 +79,7 @@ function App() {
           selectedId={selected?.properties.id ?? null}
           onSelect={selectOnMap}
           drawerOpen={drawerOpen}
-            tagColors={tagColors}
+          tagColors={tagColors}
           overlayRef={drawerRef}
         />
         {/* Filters are for browsing your places; out of the way while adding one. */}
@@ -84,8 +88,8 @@ function App() {
             query={query}
             onQueryChange={setQuery}
             tags={tags}
-            selectedTags={selectedTags}
-            onToggleTag={toggleTag}
+            tagLines={tagLines}
+            onTagLinesChange={setTagLines}
             tagColors={tagColors}
           />
         )}
@@ -116,7 +120,9 @@ function App() {
               onPreview={previewSearchResult}
             />
           ) : (
-            selected && <PlaceDetails place={selected} tagColors={tagColors} />
+            selected && (
+              <PlaceDetails key={selected.properties.id} place={selected} tagColors={tagColors} />
+            )
           )}
         </Drawer>
       </main>

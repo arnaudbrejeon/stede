@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi import FastAPI, Header, HTTPException, Query, Response
 
 from stede.geocoding import GeocodingError, View, search_places
 from stede.place_image import (
@@ -11,6 +11,7 @@ from stede.place_image import (
     ServedPlaceImage,
     find_place_image,
 )
+from stede.places import load_places, places_file
 from stede.website_image import fetch_image, make_client
 
 
@@ -27,6 +28,36 @@ app = FastAPI(title="stede", lifespan=lifespan)
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/places")
+def places(accept_encoding: str = Header(default="")) -> Response:
+    """Your saved places, as a GeoJSON FeatureCollection.
+
+    Gzipped for clients that accept it (all browsers): the collection runs to
+    megabytes but compresses well.
+    """
+    served = load_places(places_file())
+    # Vary: caches must not hand the gzipped body to a client that can't read it.
+    headers = {"Vary": "Accept-Encoding"}
+    if accepts_gzip(accept_encoding):
+        headers["Content-Encoding"] = "gzip"
+        return Response(served.gzipped, media_type="application/json", headers=headers)
+    return Response(served.json, media_type="application/json", headers=headers)
+
+
+def accepts_gzip(accept_encoding: str) -> bool:
+    """Whether an Accept-Encoding header allows gzip (and doesn't refuse it with q=0)."""
+    weights = {}
+    for coding in accept_encoding.split(","):
+        name, _, params = coding.partition(";")
+        q = params.strip().removeprefix("q=").strip() or "1"
+        try:
+            weights[name.strip().lower()] = float(q)
+        except ValueError:
+            continue
+    # An explicit gzip entry beats the "*" wildcard.
+    return weights.get("gzip", weights.get("*", 0)) > 0
 
 
 @app.get("/api/search")
