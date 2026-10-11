@@ -16,33 +16,42 @@ to pick per place later.
 | 4 | Museum & art | Arched portico (`portico`) | Illuminated manuscript (`manuscript`) | `museum`, `gallery`, `artwork`, `arts_centre` |
 | 5 | Monument & history | Castle keep (`keep`) | City gate (`city-gate`) | `attraction`, `monument`, `memorial`, `castle`, `ruins`, `archaeological_site`, `tower`; any `historic=*` |
 | 6 | Place of worship | Arched window (`gothic-window`) | Bell (`bell`) | `place_of_worship`, `church`, `cathedral`, `chapel`, `monastery` |
-| 7 | Lodging | Inn sign (`inn-sign`) | Four-poster bed (`four-poster`) | `hotel`, `guest_house`, `hostel`, `motel`, `camp_site`, `chalet`, `apartment` |
+| 7 | Lodging | Inn sign (`inn-sign`) | Pavilion tent (`pavilion`) | `hotel`, `guest_house`, `hostel`, `motel`, `camp_site`, `chalet`, `apartment` |
 | 8 | Shop & market | Market stall (`market-stall`) | Coin purse (`coin-purse`) | `marketplace`, `mall`, `supermarket`, `deli`, `clothes`, `gift`, `jewelry`, `electronics`, `garden_centre`, `farm`; any `shop=*` |
-| 9 | Park & nature | Oak tree (`oak`) | Fleur-de-lis (`fleur-de-lis`) | `park`, `garden`, `nature_reserve`, `wood`, `forest`, `beach`, `peak`, `viewpoint`; any `natural=*` |
+| 9 | Park & nature | Oak tree (`oak`) | Fleur-de-lis (`fleur-de-lis`) | `park`, `garden`, `nature_reserve`, `wood`, `forest`, `viewpoint`, `zoo`; any `natural=*` |
 | 10 | Sport & leisure | Heater shield (`shield`) | Crossed lances (`crossed-lances`) | `sports_centre`, `pitch`, `stadium`, `fitness_centre`, `swimming_pool`, `golf_course`; any `sport=*` |
 | 11 | Music & shows | Lute (`lute`) | Jester's cap (`jester-cap`) | `theatre`, `cinema`, `nightclub`, `music_venue`, `concert_hall` |
-| 12 | Travel & roads | Covered wagon (`carriage`) | Horse's head (`horse`) | `road`, `car_rental`, `driving_school`, `parking`, `rest_area`, `services`, `fuel`, `charging_station`, `station`, `bus_station`, `aerodrome`, `ferry_terminal` |
-| 13 | Home & other | Lantern (`lantern`) | Thatched cottage (`cottage`) | everything else |
+| 12 | Travel & roads | Covered wagon (`carriage`) | Horse's head (`horse`), Wayside signpost (`signpost`) | `road`, `car_rental`, `driving_school`, `parking`, `rest_area`, `services`, `fuel`, `charging_station`, `station`, `bus_station`, `aerodrome` |
+| 13 | Water & beach | Cog ship (`cog-ship`) | | `beach`, `marina`, `harbour`, `ferry_terminal`, `bay`, `coastline` |
+| 14 | Mountains & hiking | Mountain peaks (`peaks`) | Campfire (`campfire`) | `peak`, `volcano`, `mountain_pass`, `saddle`, `ridge`, `cliff`, `trailhead` |
+| 15 | Towns & cities | Walled town (`walled-town`) | | `city`, `town`, `village`, `hamlet`, `suburb`, `neighbourhood`, `quarter` |
+| 16 | Books & learning | Clasped tome (`tome`) | | `library`, `school`, `university`, `college`, `kindergarten` |
+| 17 | Health | Apothecary jar (`apothecary-jar`) | | `pharmacy`, `hospital`, `clinic`, `doctors`, `dentist`, `chemist` |
+| 18 | Civic | Scales of justice (`scales`) | | `townhall`, `courthouse`, `embassy`, `post_office`, `police` |
+| 19 | Home & other | Lantern (`lantern`) | Thatched cottage (`cottage`) | everything else |
 
 ## Ideas not drawn yet
 
 | Category | Motif | Would cover |
 |---|---|---|
 | Viewpoint & scenery | Watchtower | `tourism=viewpoint` (now under Park & nature) |
-| Books & study | Open book | `amenity=library`, `university` |
-| Water & beach | Cog ship | `natural=beach`, marinas |
-| Health | Apothecary jar | `amenity=pharmacy`, `hospital` |
+| Work & industry | Watermill or anvil | Mapstr `business`, `industry` |
+| Fun & fairs | Carousel | `theme_park`, Mapstr `amusement` |
+| Zoo | Rampant lion or bear | `zoo` (now under Park & nature) |
+| Food variety | Pie, pretzel, wafer… | alternatives for burger, pizza, ice cream |
 
 ## Notes from review
 
 - Clear at pin size: plate, roast leg, loaf, goblet, manuscript, keep, city gate,
   bell, arched window, coin purse, oak, fleur-de-lis, shield, lute, lantern,
   covered wagon, horse's head.
-- Weaker: four-poster bed (hard to read small), arched portico (arches only show
+- Removed: four-poster bed (hard to read small), scallop shell, pilgrim's staff (read as a pin), walking boot.
+- Weaker: arched portico (arches only show
   large), steaming pot (reads as a modern cup), thatched cottage (thatch doesn't
-  show), inn sign (a bit busy), cauldron flames (small).
+  show), inn sign (a bit busy). The cauldron's flames were too small; removed.
 - The jester's cap first read as a crown with upright points; drooping points fixed it.
 - The horse's head had white mane notches that read as claw marks at pin size; removed.
+  Its first outline read as an otter; it's now a chess-knight-like head with a tufted mane.
   It echoes the rider in the logo, which is why the wagon is the default.
 
 ## Design rules

@@ -139,11 +139,11 @@ icon(
 icon(
     "cauldron", "Cauldron", "Restaurant",
     fill=[
-        rect(3.5, 5.2, 17, 2.4, 1.2),
-        "M5 7.2h14v2.6a7 6.2 0 0 1-14 0Z",
-        rect(6.4, 13, 2.2, 5.4, 0.8), rect(15.4, 13, 2.2, 5.4, 0.8),
-        # A row of flames between the legs.
-        "M8.6 22.4h6.8c.4-1.4-.3-2.6-1.2-3.4 0 .8-.5 1.4-1.1 1.4.3-1.3-.3-2.5-1.3-3.3-.1 1.1-.6 1.8-1.4 2.2-.4-.7-1-1.1-1.5-1.2.5 1.3 0 2.8-.3 4.3Z",
+        # Round-bellied pot on short feet, with a hanging handle over the rim.
+        "M5.4 7.4C5.4 2.4 18.6 2.4 18.6 7.4H16.8C16.8 4.4 7.2 4.4 7.2 7.4Z",
+        rect(3.8, 6.4, 16.4, 2.6, 1.3),
+        "M5 8.6H19C20 10 20.6 11.6 20.6 13.2 20.6 17.4 16.8 20.2 12 20.2S3.4 17.4 3.4 13.2C3.4 11.6 4 10 5 8.6Z",
+        rect(6.2, 18, 2.4, 3.8, 1), rect(15.4, 18, 2.4, 3.8, 1),
     ],
 )
 # 2 Café & bakery
@@ -253,16 +253,6 @@ icon(
     ],
     holes=[star(13.3, 13.3, 3.2, 1.35)],
 )
-icon(
-    "four-poster", "Four-poster bed", "Lodging",
-    fill=[
-        rect(2.6, 3.4, 2.4, 18.4, 0.6), rect(19, 3.4, 2.4, 18.4, 0.6),
-        rect(2.6, 3.4, 18.8, 2.6, 0.6),
-        "M5 6h4.6L5 12.4Z", mirror("M5 6h4.6L5 12.4Z".replace("h4.6", "L9.6 6")),
-        rect(2.6, 13.2, 18.8, 4.8, 1),
-        rect(5.6, 10.6, 4.6, 3.4, 1.4),
-    ],
-)
 # 8 Shop & market
 icon(
     "market-stall", "Market stall", "Shop & market",
@@ -312,9 +302,10 @@ icon(
 icon(
     "crossed-lances", "Crossed lances", "Sport & leisure",
     fill=[
-        bar(4.2, 20.6, 18.2, 6.6, 1.8), poly((17, 5.4), (21.6, 2.4), (18.6, 7)),
+        # Shafts along x + y = 24.8 and its mirror, with each tip and guard on its shaft.
+        bar(4.2, 20.6, 18, 6.8, 1.8), poly((18.54, 8.94), (21.02, 3.78), (15.86, 6.26)),
         circle(7.4, 17.4, 2.4),
-        bar(19.8, 20.6, 5.8, 6.6, 1.8), poly((7, 5.4), (2.4, 2.4), (5.4, 7)),
+        bar(19.8, 20.6, 6, 6.8, 1.8), poly((8.14, 6.26), (2.98, 3.78), (5.46, 8.94)),
         circle(16.6, 17.4, 2.4),
     ],
 )
@@ -356,13 +347,26 @@ icon(
 icon(
     "horse", "Horse's head", "Travel & roads",
     fill=[
-        # Head and neck facing left, ear up, cut off square at the chest.
-        "M7.6 21.8 8.8 15.8C7 15.2 4.8 14.8 3.8 13.4 3 12.2 3.4 10.8 4.6 10.2L9.2 7.2 9.8 2.4 12 5C17 5.2 20.4 9 20.4 14.6V21.8Z",
+        # Head and arched neck facing left: pricked ears, a long face down to a
+        # rounded muzzle, the round jowl, then the throat down to the chest. The
+        # mane is a ridge of tufts along the back of the neck.
+        "M8.8 22.4C9.6 19.6 10.8 17.6 12 16 10.6 16.6 9 16.8 7.6 16.4L5 16.9C3.8 17.1 2.8 16.4 2.8 15.2 2.8 14.4 3.2 13.8 3.8 13.3L10.2 6 10.4 1.8 12.6 4.4 13.6 2 14.8 4.8C18.6 5.6 21.4 9.4 21.4 14.4V22.4Z",
+        circle(16.2, 5.8, 1.5), circle(18.8, 8, 1.5), circle(20.4, 11, 1.5),
     ],
     holes=[
-        circle(10.4, 9, 0.9),
-        # Nostril.
-        circle(5.4, 11.8, 0.6),
+        circle(11.2, 8.6, 1),
+        circle(4.6, 14.6, 0.7),
+        # The line of the jaw, so the head reads apart from the neck.
+        bar(12.2, 15.4, 13.6, 11.4, 1.2, True),
+    ],
+)
+icon(
+    "signpost", "Wayside signpost", "Travel & roads",
+    fill=[
+        rect(10.8, 2.6, 2.4, 18, 0.6),
+        poly((12, 4.2), (19.4, 4.2), (21.8, 6.5), (19.4, 8.8), (12, 8.8)),
+        poly((12, 10.6), (4.6, 10.6), (2.2, 12.9), (4.6, 15.2), (12, 15.2)),
+        "M5.8 21.8C6.8 20 9.2 19.2 12 19.2S17.2 20 18.2 21.8Z",
     ],
 )
 # 13 Home & other
@@ -387,6 +391,97 @@ icon(
     holes=[circle(12, 3.6, 0.9), arch(8.6, 11.2, 2.9, 17.4), arch(12.5, 11.2, 2.9, 17.4)],
 )
 
+# 14 Water & beach
+icon(
+    "cog-ship", "Cog ship", "Water & beach",
+    fill=[
+        # Square sail on a mast with a pennant, over a round hull with raised
+        # castles at bow and stern.
+        rect(11.3, 1.6, 1.4, 12), poly((12.6, 1.6), (16.4, 2.6), (12.6, 3.6)),
+        "M7.4 4H16.6Q17.6 7.6 16.6 11.2H7.4Q6.4 7.6 7.4 4Z",
+        rect(2, 10.6, 4.4, 3, 0.4), rect(17.6, 10.6, 4.4, 3, 0.4),
+        "M1.6 13.2H22.4L19.8 19.4Q12 21.4 4.2 19.4Z",
+    ],
+    holes=[rect(11.3, 5.2, 1.4, 4.8), rect(9.2, 6.9, 5.6, 1.4)],
+)
+# 15 Mountains & hiking
+icon(
+    "peaks", "Mountain peaks", "Mountains & hiking",
+    fill=[poly((1.4, 21.4), (9.6, 3.2), (17.8, 21.4)), poly((10.6, 21.4), (16.6, 9.6), (22.6, 21.4))],
+    holes=[
+        # A jagged snow line under the summit, and a gap where the near peak
+        # stands in front of the far one.
+        bar(6.2, 11.4, 8.2, 13.8, 1.7, True), bar(8.2, 13.8, 9.8, 11.6, 1.7, True),
+        bar(9.8, 11.6, 11.2, 13.8, 1.7, True), bar(11.2, 13.8, 13, 11.4, 1.7, True),
+        bar(16.6, 9.6, 10.6, 21.4, 1.4),
+    ],
+)
+icon(
+    "campfire", "Campfire", "Mountains & hiking",
+    fill=[
+        "M12 2.4C9 6 6.8 8.6 6.8 12 6.8 14.6 9 16.2 12 16.2S17.2 14.6 17.2 12C17.2 9.8 16 8 14.8 6.8 14.8 8.6 14 9.8 12.8 10.2 13.6 7.6 13.2 4.8 12 2.4Z",
+        bar(4.4, 21, 19.6, 17.6, 2.4, True), bar(4.4, 17.6, 19.6, 21, 2.4, True),
+    ],
+    holes=["M12 9.8C10.6 11.6 9.8 12.6 9.8 13.6 9.8 14.6 10.8 15.2 12 15.2S14.2 14.6 14.2 13.6C14.2 12.6 13.4 11.6 12 9.8Z"],
+)
+# 16 Towns & cities
+icon(
+    "walled-town", "Walled town", "Towns & cities",
+    fill=[
+        # Skyline (tower, church spire, house) behind a town wall with a gate.
+        rect(3.4, 8, 4.6, 6), poly((2.8, 8.4), (5.7, 4.4), (8.6, 8.4)),
+        rect(10.2, 6.8, 3.6, 7.2), poly((9.8, 7.2), (12, 1.4), (14.2, 7.2)),
+        rect(15.8, 9.2, 5, 5), poly((15.2, 9.6), (18.3, 6.4), (21.4, 9.6)),
+        rect(1.6, 13.4, 20.8, 8.4, 0.4),
+    ],
+    holes=[rect(1.6, 13, 20.8, 1.3), arch(9.6, 17.6, 4.8, 21.8)],
+)
+# 17 Books & learning
+icon(
+    "tome", "Clasped tome", "Books & learning",
+    fill=[
+        # Cover with the page block showing along the bottom, and a clasp.
+        "M6.6 2.4H19.6V17.2H6.8A1.7 1.7 0 0 0 6.8 20.6H19.6V21.8H6.6A2.6 2.6 0 0 1 4 19.2V5A2.6 2.6 0 0 1 6.6 2.4Z",
+        rect(17, 7.4, 4.6, 4.2, 1),
+    ],
+    holes=[poly((12.2, 5.2), (14.8, 9.8), (12.2, 14.4), (9.6, 9.8)), circle(19.4, 9.5, 0.9)],
+)
+# 18 Health
+icon(
+    "apothecary-jar", "Apothecary jar", "Health",
+    fill=[
+        circle(12, 2.8, 1.5),
+        rect(6.6, 3.6, 10.8, 2.6, 1.2),
+        rect(8.2, 6, 7.6, 2),
+        "M6 7.8H18C17 11 17 15 18 18.6 18 20.6 16.6 21.6 14.6 21.6H9.4C7.4 21.6 6 20.6 6 18.6 7 15 7 11 6 7.8Z",
+    ],
+    holes=[rect(7.8, 11.2, 8.4, 4.8, 0.8)],
+)
+# 19 Civic
+icon(
+    "scales", "Scales of justice", "Civic",
+    fill=[
+        circle(12, 3.8, 1.8), rect(11.1, 4, 1.8, 15.6),
+        rect(6.6, 19.2, 10.8, 2.6, 1.2),
+        bar(3.4, 6.4, 20.6, 6.4, 1.8, True),
+        bar(5.2, 6.8, 2.2, 13.6, 1.2), bar(5.2, 6.8, 8.2, 13.6, 1.2),
+        bar(18.8, 6.8, 15.8, 13.6, 1.2), bar(18.8, 6.8, 21.8, 13.6, 1.2),
+        "M1.4 13.2H9a3.8 3.8 0 0 1-7.6 0Z", "M15 13.2H22.6a3.8 3.8 0 0 1-7.6 0Z",
+    ],
+)
+# 7 Lodging, continued
+icon(
+    "pavilion", "Pavilion tent", "Lodging",
+    fill=[
+        # A striped tournament tent with a pennant.
+        rect(11.3, 1.4, 1.4, 4), poly((12.6, 1.4), (16.4, 2.4), (12.6, 3.4)),
+        poly((2.4, 11.6), (12, 4.6), (21.6, 11.6)),
+        *[circle(4 + i * 3.2, 11.6, 1.6) for i in range(6)],
+        rect(4, 11.6, 16, 10),
+    ],
+    holes=[poly((12, 13.6), (15.2, 21.6), (8.8, 21.6)), rect(5.8, 14.4, 1.4, 7.2), rect(16.8, 14.4, 1.4, 7.2)],
+)
+
 
 # Categories, in display order. The first icon is the default; the others are
 # alternatives a user can pick for a place.
@@ -397,12 +492,18 @@ CATEGORIES = [
     ("museum", "Museum & art", ["portico", "manuscript"]),
     ("monument", "Monument & history", ["keep", "city-gate"]),
     ("worship", "Place of worship", ["gothic-window", "bell"]),
-    ("lodging", "Lodging", ["inn-sign", "four-poster"]),
+    ("lodging", "Lodging", ["inn-sign", "pavilion"]),
     ("shop", "Shop & market", ["market-stall", "coin-purse"]),
     ("park", "Park & nature", ["oak", "fleur-de-lis"]),
     ("sport", "Sport & leisure", ["shield", "crossed-lances"]),
     ("music", "Music & shows", ["lute", "jester-cap"]),
-    ("travel", "Travel & roads", ["carriage", "horse"]),
+    ("travel", "Travel & roads", ["carriage", "horse", "signpost"]),
+    ("water", "Water & beach", ["cog-ship"]),
+    ("mountain", "Mountains & hiking", ["peaks", "campfire"]),
+    ("town", "Towns & cities", ["walled-town"]),
+    ("learning", "Books & learning", ["tome"]),
+    ("health", "Health", ["apothecary-jar"]),
+    ("civic", "Civic", ["scales"]),
     ("other", "Home & other", ["lantern", "cottage"]),
 ]
 
@@ -421,7 +522,7 @@ OSM_VALUES = {
         "marketplace", "mall", "supermarket", "deli", "clothes", "gift", "jewelry", "electronics",
         "garden_centre", "farm",
     ],
-    "park": ["park", "garden", "nature_reserve", "wood", "forest", "beach", "peak", "viewpoint", "trailhead", "zoo"],
+    "park": ["park", "garden", "nature_reserve", "wood", "forest", "viewpoint", "zoo"],
     "sport": [
         "sports_centre", "pitch", "stadium", "fitness_centre", "swimming_pool", "golf_course", "horse_riding",
         "theme_park",
@@ -429,8 +530,14 @@ OSM_VALUES = {
     "music": ["theatre", "cinema", "nightclub", "music_venue", "concert_hall"],
     "travel": [
         "road", "car_rental", "driving_school", "parking", "rest_area", "services", "fuel", "charging_station",
-        "station", "bus_station", "aerodrome", "ferry_terminal",
+        "station", "bus_station", "aerodrome",
     ],
+    "water": ["beach", "marina", "harbour", "ferry_terminal", "bay", "coastline"],
+    "mountain": ["peak", "volcano", "mountain_pass", "saddle", "ridge", "cliff", "trailhead"],
+    "town": ["city", "town", "village", "hamlet", "suburb", "neighbourhood", "quarter"],
+    "learning": ["library", "school", "university", "college", "kindergarten"],
+    "health": ["pharmacy", "hospital", "clinic", "doctors", "dentist", "chemist"],
+    "civic": ["townhall", "courthouse", "embassy", "post_office", "police"],
 }
 OSM_KEYS = {"shop": "shop", "historic": "monument", "natural": "park", "sport": "sport"}
 assert {i for _, _, icons in CATEGORIES for i in icons} == set(ICONS), "every icon in one category"
