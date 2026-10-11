@@ -8,6 +8,8 @@ import {
   type MapView,
   type SearchResults,
 } from '../geocoder'
+import { PinDetails } from './PinDetails'
+import type { LngLat } from './PlacesMap'
 import { ResultDetails } from './ResultDetails'
 
 const MIN_CHARS = 3
@@ -18,6 +20,9 @@ type AddPlaceSearchProps = {
   onPick: (result: GeocodeResult) => void
   // Hovering or arrowing onto a result.
   onPreview: (result: GeocodeResult) => void
+  // A spot tapped on the map, shown in place of the search.
+  pin: LngLat | null
+  onClearPin: () => void
 }
 
 type Status = 'idle' | 'loading' | 'done' | 'error'
@@ -29,8 +34,9 @@ const GROUPS = [
 ] as const
 
 // Drawer content for finding a new place: a search field with the results listed
-// below it. Arrow keys move through results, Enter picks one.
-export function AddPlaceSearch({ getView, onPick, onPreview }: AddPlaceSearchProps) {
+// below it, or a pin dropped on the map. Arrow keys move through results, Enter
+// picks one.
+export function AddPlaceSearch({ getView, onPick, onPreview, pin, onClearPin }: AddPlaceSearchProps) {
   const [text, setText] = useState('')
   const [found, setFound] = useState<SearchResults>(NO_RESULTS)
   const [status, setStatus] = useState<Status>('idle')
@@ -40,6 +46,12 @@ export function AddPlaceSearch({ getView, onPick, onPreview }: AddPlaceSearchPro
   const getViewRef = useRef(getView)
   const inputRef = useRef<HTMLInputElement>(null)
   const listId = useId()
+  // A new pin replaces the result being shown (its marker is gone from the map).
+  const [shownPin, setShownPin] = useState(pin)
+  if (pin !== shownPin) {
+    setShownPin(pin)
+    if (pin) setPicked(null)
+  }
 
   // Ready to type with a physical keyboard. On touch screens focusing would pop
   // up the on-screen keyboard over the sheet, so there you tap the field first.
@@ -122,10 +134,19 @@ export function AddPlaceSearch({ getView, onPick, onPreview }: AddPlaceSearchPro
         onChange={(e) => {
           setText(e.target.value)
           setPicked(null)
+          onClearPin()
         }}
         onKeyDown={onKeyDown}
       />
-      {picked ? (
+      {pin ? (
+        <PinDetails
+          point={pin}
+          onBack={() => {
+            onClearPin()
+            inputRef.current?.focus({ preventScroll: true })
+          }}
+        />
+      ) : picked ? (
         <ResultDetails
           key={resultKey(picked)}
           result={picked}
@@ -134,47 +155,47 @@ export function AddPlaceSearch({ getView, onPick, onPreview }: AddPlaceSearchPro
             inputRef.current?.focus({ preventScroll: true })
           }}
         />
+      ) : !showList ? (
+        <p className="search-note">Or tap the map to drop a pin.</p>
       ) : (
-        showList && (
-          <div className="search-results" id={listId} role="listbox" aria-label="Search results">
-            {status === 'loading' && !results.length && <p className="search-note">Searching…</p>}
-            {status === 'error' && <p className="search-note">Search is unavailable right now.</p>}
-            {status === 'done' && !results.length && <p className="search-note">No results.</p>}
-            {groups.map((group) => (
-              <div
-                key={group.key}
-                role={split ? 'group' : undefined}
-                aria-labelledby={split ? `${listId}-${group.key}` : undefined}
-              >
-                {split && (
-                  <div className="search-group" id={`${listId}-${group.key}`} role="presentation">
-                    {group.label}
+        <div className="search-results" id={listId} role="listbox" aria-label="Search results">
+          {status === 'loading' && !results.length && <p className="search-note">Searching…</p>}
+          {status === 'error' && <p className="search-note">Search is unavailable right now.</p>}
+          {status === 'done' && !results.length && <p className="search-note">No results.</p>}
+          {groups.map((group) => (
+            <div
+              key={group.key}
+              role={split ? 'group' : undefined}
+              aria-labelledby={split ? `${listId}-${group.key}` : undefined}
+            >
+              {split && (
+                <div className="search-group" id={`${listId}-${group.key}`} role="presentation">
+                  {group.label}
+                </div>
+              )}
+              {group.items.map((r) => {
+                const i = results.indexOf(r)
+                return (
+                  <div
+                    key={resultKey(r)}
+                    id={`${listId}-${i}`}
+                    role="option"
+                    aria-selected={i === active}
+                    className="search-result"
+                    onMouseEnter={() => {
+                      setActive(i)
+                      onPreview(r)
+                    }}
+                    onClick={() => pick(r)}
+                  >
+                    <span className="search-title">{resultTitle(r.properties)}</span>
+                    <span className="search-subtitle">{resultSubtitle(r.properties)}</span>
                   </div>
-                )}
-                {group.items.map((r) => {
-                  const i = results.indexOf(r)
-                  return (
-                    <div
-                      key={resultKey(r)}
-                      id={`${listId}-${i}`}
-                      role="option"
-                      aria-selected={i === active}
-                      className="search-result"
-                      onMouseEnter={() => {
-                        setActive(i)
-                        onPreview(r)
-                      }}
-                      onClick={() => pick(r)}
-                    >
-                      <span className="search-title">{resultTitle(r.properties)}</span>
-                      <span className="search-subtitle">{resultSubtitle(r.properties)}</span>
-                    </div>
-                  )
-                })}
-              </div>
-            ))}
-          </div>
-        )
+                )
+              })}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )

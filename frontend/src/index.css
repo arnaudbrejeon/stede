@@ -589,6 +589,14 @@ body,
   position: relative;
   pointer-events: none;
 }
+/* A pin dropped while adding a place can be dragged to adjust it. */
+.search-pin.dropped-pin {
+  pointer-events: auto;
+  cursor: grab;
+}
+.search-pin.dropped-pin:active {
+  cursor: grabbing;
+}
 .search-pin-disc {
   position: absolute;
   inset: 0;

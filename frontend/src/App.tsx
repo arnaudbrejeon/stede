@@ -4,7 +4,7 @@ import { Drawer } from './components/Drawer'
 import { FilterPanel } from './components/FilterPanel'
 import { Header } from './components/Header'
 import { PlaceDetails } from './components/PlaceDetails'
-import { PlacesMap, type PlacesMapHandle } from './components/PlacesMap'
+import { PlacesMap, type LngLat, type PlacesMapHandle } from './components/PlacesMap'
 import type { GeocodeResult } from './geocoder'
 import { allTags, fetchPlaces, filterPlaces, NO_PLACES, type Places, type TagLine } from './places'
 import { buildTagColors } from './tags'
@@ -17,6 +17,8 @@ function App() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   // Browsing your places is the default; searching for a new one is opt-in.
   const [searching, setSearching] = useState(false)
+  // A spot picked on the map while adding a place, instead of searching.
+  const [pin, setPin] = useState<LngLat | null>(null)
   const appRef = useRef<HTMLDivElement>(null)
   const drawerRef = useRef<HTMLElement>(null)
   const mapRef = useRef<PlacesMapHandle>(null)
@@ -51,6 +53,7 @@ function App() {
   const closeDrawer = useCallback(() => {
     setSelectedId(null)
     setSearching(false)
+    setPin(null)
     mapRef.current?.clearLocation()
   }, [])
   // Clicking a place leaves search for its details; clicking empty map while
@@ -58,19 +61,26 @@ function App() {
   const selectOnMap = useCallback((id: number | null) => {
     if (id === null) return setSelectedId(null)
     setSearching(false)
+    setPin(null)
     mapRef.current?.clearLocation()
     setSelectedId(id)
   }, [])
+  // One marker at a time: a dropped pin replaces the search result's, and back.
+  const dropPin = useCallback((point: LngLat) => {
+    mapRef.current?.clearLocation()
+    setPin(point)
+  }, [])
+  const clearPin = useCallback(() => setPin(null), [])
 
   const getMapView = useCallback(() => mapRef.current?.getView(), [])
-  const showSearchResult = useCallback(
-    (result: GeocodeResult) => mapRef.current?.showLocation(result),
-    [],
-  )
-  const previewSearchResult = useCallback(
-    (result: GeocodeResult) => mapRef.current?.previewLocation(result),
-    [],
-  )
+  const showSearchResult = useCallback((result: GeocodeResult) => {
+    setPin(null)
+    mapRef.current?.showLocation(result)
+  }, [])
+  const previewSearchResult = useCallback((result: GeocodeResult) => {
+    setPin(null)
+    mapRef.current?.previewLocation(result)
+  }, [])
 
   return (
     <div ref={appRef} className={`app${drawerOpen ? ' drawer-open' : ''}`}>
@@ -84,6 +94,8 @@ function App() {
           drawerOpen={drawerOpen}
           tagColors={tagColors}
           overlayRef={drawerRef}
+          onPinDrop={searching ? dropPin : undefined}
+          pin={pin}
         />
         {/* Filters are for browsing your places; out of the way while adding one. */}
         {!searching && (
@@ -121,6 +133,8 @@ function App() {
               getView={getMapView}
               onPick={showSearchResult}
               onPreview={previewSearchResult}
+              pin={pin}
+              onClearPin={clearPin}
             />
           ) : (
             selected && (

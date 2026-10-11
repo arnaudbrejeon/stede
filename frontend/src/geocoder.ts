@@ -55,6 +55,15 @@ export async function geocode(query: string, options: SearchOptions = {}): Promi
   return response.json()
 }
 
+// "12 Rue de Buci, Paris, France", or "Near <town>" away from streets; null
+// when nothing is known around the point.
+export async function fetchAddress([lon, lat]: [number, number], signal?: AbortSignal): Promise<string | null> {
+  const params = new URLSearchParams({ lat: lat.toFixed(6), lon: lon.toFixed(6), lang: navigator.language })
+  const response = await fetch(`/api/address?${params}`, { signal })
+  if (!response.ok) throw new Error(`Address lookup failed: ${response.status}`)
+  return (await response.json()).address
+}
+
 // "Tour Eiffel" / "5 Avenue Anatole France, Paris, France"
 export function resultTitle(p: PhotonProperties): string {
   return p.name ?? streetLine(p) ?? p.city ?? p.country ?? 'Unnamed place'

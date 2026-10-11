@@ -4,7 +4,7 @@ from typing import Any
 import httpx
 from fastapi import FastAPI, Header, HTTPException, Query, Response
 
-from stede.geocoding import GeocodingError, View, search_places
+from stede.geocoding import GeocodingError, View, address_at, search_places
 from stede.place_image import (
     OsmType,
     PlaceImageResponse,
@@ -82,6 +82,19 @@ async def search(
         return await search_places(
             app.state.http, q.strip(), limit=limit, view=view, lang=lang
         )
+    except GeocodingError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/api/address")
+async def address(
+    lat: float = Query(ge=-90, le=90),
+    lon: float = Query(ge=-180, le=180),
+    lang: str | None = Query(default=None, max_length=16),
+) -> dict[str, str | None]:
+    """The address of a point on the map (a dropped pin), or null when unknown."""
+    try:
+        return {"address": await address_at(app.state.http, lon, lat, lang=lang)}
     except GeocodingError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 

@@ -26,6 +26,9 @@ export type PlacesMapHandle = {
   clearLocation: () => void
 }
 
+// [longitude, latitude]
+export type LngLat = [number, number]
+
 type PlacesMapProps = {
   ref?: Ref<PlacesMapHandle>
   places: Places
@@ -36,6 +39,11 @@ type PlacesMapProps = {
   tagColors: TagColors
   // Panel laid over the map edge; the selected place is centred in the area it leaves visible.
   overlayRef?: RefObject<HTMLElement | null>
+  // While adding a place: tapping empty map drops a pin there, and dragging it
+  // moves it; both report the new spot.
+  onPinDrop?: (point: LngLat) => void
+  // The dropped pin, if any.
+  pin?: LngLat | null
 }
 
 export function PlacesMap({
@@ -46,6 +54,8 @@ export function PlacesMap({
   drawerOpen,
   tagColors,
   overlayRef,
+  onPinDrop,
+  pin = null,
 }: PlacesMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
@@ -59,6 +69,8 @@ export function PlacesMap({
   const viewBeforeDrawerRef = useRef<{ center: maplibregl.LngLat; zoom: number } | null>(null)
   const drawerOpenRef = useRef(drawerOpen)
   const locationMarkerRef = useRef<maplibregl.Marker | null>(null)
+  const onPinDropRef = useRef(onPinDrop)
+  const pinMarkerRef = useRef<maplibregl.Marker | null>(null)
 
   const placeLocationMarker = (map: maplibregl.Map, center: [number, number]) => {
     locationMarkerRef.current ??= new maplibregl.Marker({ element: createSearchPinElement() })
@@ -190,13 +202,16 @@ export function PlacesMap({
       map.easeTo({ center: f.geometry.coordinates as [number, number], zoom })
     })
 
-    // Click a place to select it; click empty map to clear the selection.
+    // Click a place to select it; click empty map to clear the selection, or,
+    // while adding a place, to drop a pin there.
     map.on('click', (e) => {
       if (!map.getLayer('place-points')) return
       const [place] = map.queryRenderedFeatures(e.point, { layers: ['place-points'] })
       if (place) return onSelectRef.current(place.properties.id as number)
       const [cluster] = map.queryRenderedFeatures(e.point, { layers: ['clusters'] })
-      if (!cluster) onSelectRef.current(null)
+      if (cluster) return
+      if (onPinDropRef.current) onPinDropRef.current([e.lngLat.lng, e.lngLat.lat])
+      else onSelectRef.current(null)
     })
 
     // Only user gestures (drag, scroll, zoom buttons) carry an originalEvent.
@@ -250,6 +265,29 @@ export function PlacesMap({
     // Only a new selection should move the map, not later data or ref changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId])
+
+  useEffect(() => {
+    onPinDropRef.current = onPinDrop
+  }, [onPinDrop])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !pin) {
+      pinMarkerRef.current?.remove()
+      return
+    }
+    if (!pinMarkerRef.current) {
+      const element = createSearchPinElement()
+      element.classList.add('dropped-pin')
+      const marker = new maplibregl.Marker({ element, draggable: true })
+      marker.on('dragend', () => {
+        const { lng, lat } = marker.getLngLat()
+        onPinDropRef.current?.([lng, lat])
+      })
+      pinMarkerRef.current = marker
+    }
+    pinMarkerRef.current.setLngLat(pin).addTo(map)
+  }, [pin])
 
   useEffect(() => {
     onSelectRef.current = onSelect
