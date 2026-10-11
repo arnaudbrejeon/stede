@@ -1,18 +1,28 @@
 """Find the OpenStreetMap element behind each saved Mapstr place.
 
-For every feature in data/mapstr.json, asks Overpass for named OSM elements
-around its coordinates and keeps the one whose name best matches. Matches are
-written back into the file as `properties.osm`:
+For every feature in data/mapstr.json, first searches Photon (Komoot's OSM
+geocoder, one request per place) for the place's name around its pin. Places
+Photon doesn't find are then looked for with Overpass, which asks for every
+named OSM element around the pin: slower, and often overloaded, but it also
+knows elements Photon doesn't list. Either way the element whose name best
+matches, close enough to the pin, is kept and written back into the file as
+`properties.osm`:
 
-    {"type": "node", "id": 123, "name": "Le Comptoir", "distance_m": 12, "score": 0.95}
+    {"type": "node", "id": 123, "name": "Le Comptoir", "distance_m": 12,
+     "score": 0.95, "source": "photon"}
 
-Overpass responses are cached in data/.osm_cache/, so an interrupted run can be
-restarted and only the missing batches are fetched. A copy of the original
-file is kept next to it as mapstr.json.bak.
+Each place also records the searches it has been through (`osm_tried`:
+"photon", then the Overpass search radii in metres), so a rerun skips places
+already looked for, found or not, and carries on where the last one stopped.
+The file is saved regularly and when the run is interrupted; Photon and
+Overpass responses are cached in data/.photon_cache/ and data/.osm_cache/ as
+well. A copy of the original file is kept next to it as mapstr.json.bak.
 
     cd backend
     uv run python scripts/match_osm.py            # all places
     uv run python scripts/match_osm.py --limit 200  # try it on a sample
+    uv run python scripts/match_osm.py --photon-only  # skip Overpass for now
+    uv run python scripts/match_osm.py --redo     # look for every place again
 """
 
 import argparse
@@ -32,7 +42,14 @@ import httpx
 DATA = Path(__file__).resolve().parents[2] / "data"
 PLACES_FILE = DATA / "mapstr.json"
 CACHE_DIR = DATA / ".osm_cache"
+PHOTON_CACHE_DIR = DATA / ".photon_cache"
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+PHOTON_URL = "https://photon.komoot.io/api/"
+# Komoot's Photon server is free for fair use: one request a second at most.
+PHOTON_INTERVAL = 1.0
+# Photon results are searched within this many metres of the pin (a box), so a
+# common name finds the one nearby rather than the best known one elsewhere.
+PHOTON_AREA = 7000
 USER_AGENT = "stede/0.1 (personal places map; OSM matching script)"
 
 # Mapstr icons for places that cover a large area: their OSM element may be a
@@ -204,8 +221,77 @@ def overpass(
     )
 
 
+def photon(feature: dict, client: httpx.Client) -> list[dict]:
+    """Photon's results for the place's name around its pin, as Overpass elements."""
+    lon, lat = feature["geometry"]["coordinates"][:2]
+    dlat = PHOTON_AREA / 111_320
+    dlon = dlat / max(math.cos(math.radians(lat)), 0.01)
+    params = {
+        "q": feature["properties"]["name"],
+        "lat": f"{lat:.6f}",
+        "lon": f"{lon:.6f}",
+        "bbox": f"{lon - dlon:.6f},{lat - dlat:.6f},{lon + dlon:.6f},{lat + dlat:.6f}",
+        "limit": "10",
+    }
+    query = json.dumps(params, sort_keys=True, ensure_ascii=False)
+    cache = PHOTON_CACHE_DIR / f"{hashlib.sha1(query.encode()).hexdigest()}.json"
+    if cache.exists():
+        results = json.loads(cache.read_text())
+    else:
+        results = photon_request(params, client)
+        cache.write_text(json.dumps(results, ensure_ascii=False))
+    elements = []
+    for result in results["features"]:
+        props = result["properties"]
+        osm_type = {"N": "node", "W": "way", "R": "relation"}.get(props.get("osm_type"))
+        key, value = props.get("osm_key"), props.get("osm_value")
+        # The same things Overpass is asked to leave out (see overpass()).
+        if not osm_type or not props.get("name") or key == "highway":
+            continue
+        if key == "boundary" and value == "administrative":
+            continue
+        result_lon, result_lat = result["geometry"]["coordinates"][:2]
+        elements.append(
+            {
+                "type": osm_type,
+                "id": props["osm_id"],
+                "lat": result_lat,
+                "lon": result_lon,
+                "tags": {"name": props["name"], key: value},
+            }
+        )
+    return elements
+
+
+_last_photon_request = 0.0
+
+
+def photon_request(params: dict, client: httpx.Client) -> dict:
+    global _last_photon_request
+    for attempt in range(10):
+        time.sleep(max(0.0, _last_photon_request + PHOTON_INTERVAL - time.monotonic()))
+        _last_photon_request = time.monotonic()
+        try:
+            resp = client.get(PHOTON_URL, params=params)
+        except httpx.HTTPError as e:
+            print(f"  network error ({e!r}), retrying", file=sys.stderr)
+        else:
+            if resp.status_code == 200:
+                return resp.json()
+            # A name Photon can't parse: nothing to find, don't ask again.
+            if resp.status_code == 400:
+                return {"features": []}
+            print(f"  Photon said {resp.status_code}, retrying", file=sys.stderr)
+        time.sleep(min(5 * (attempt + 1), 60))
+    raise RuntimeError("Photon kept failing; rerun later, found places are saved")
+
+
 def best_match(
-    feature: dict, elements: list[dict], radius: int, min_score: float
+    feature: dict,
+    elements: list[dict],
+    radius: int,
+    min_score: float,
+    source: str = "overpass",
 ) -> dict | None:
     lon, lat = feature["geometry"]["coordinates"][:2]
     name = feature["properties"]["name"]
@@ -246,76 +332,130 @@ def best_match(
         "name": el["tags"].get("name"),
         "distance_m": round(dist),
         "score": round(sim, 2),
+        "source": source,
     }
+
+
+def save(collection: dict) -> None:
+    # Written beside the file, then swapped in, so stopping the script while
+    # it saves never leaves the file half-written.
+    tmp = PLACES_FILE.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(collection, ensure_ascii=False, indent=2))
+    shutil.copymode(PLACES_FILE, tmp)
+    tmp.replace(PLACES_FILE)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--limit", type=int, help="only look at the first N places")
     parser.add_argument(
-        "--redo", action="store_true", help="re-match places that already have osm"
+        "--redo",
+        action="store_true",
+        help="look again for places already matched or looked for",
+    )
+    parser.add_argument(
+        "--photon-only",
+        action="store_true",
+        help="only search Photon, leave Overpass for a later run",
     )
     args = parser.parse_args()
 
     collection = json.loads(PLACES_FILE.read_text())
     features = collection["features"][: args.limit]
     CACHE_DIR.mkdir(exist_ok=True)
+    PHOTON_CACHE_DIR.mkdir(exist_ok=True)
     backup = PLACES_FILE.with_suffix(".json.bak")
     if not backup.exists():
         shutil.copy2(PLACES_FILE, backup)
 
-    todo = [f for f in features if args.redo or "osm" not in f["properties"]]
-    for f in todo:
-        f["properties"].pop("osm", None)
-    print(f"{len(todo)} places to match")
+    if args.redo:
+        for f in features:
+            f["properties"].pop("osm", None)
+            f["properties"].pop("osm_tried", None)
+    todo = [f for f in features if "osm" not in f["properties"]]
+    print(f"{len(todo)} places without an OSM reference")
 
-    with httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=240) as client:
-        for radius, batch_size, min_score, applies in PASSES:
-            todo = [f for f in todo if "osm" not in f["properties"]]
-            todo_pass = [f for f in todo if applies(f["properties"].get("icon"))]
-            # Far around a point there are thousands of named things: past the
-            # first pass, only ask for those sharing a word with the place.
-            # (A place with no such word can only be found close by.)
-            wide = radius > PASSES[0][0]
-            if wide:
-                todo_pass = [
-                    f for f in todo_pass if name_pattern(f["properties"]["name"])
-                ]
-            # Sort roughly by location so each query covers one area.
-            todo_pass.sort(
-                key=lambda f: (
-                    round(f["geometry"]["coordinates"][1]),
-                    f["geometry"]["coordinates"][0],
-                )
-            )
-            batches = [
-                todo_pass[i : i + batch_size]
-                for i in range(0, len(todo_pass), batch_size)
-            ]
-            print(f"pass {radius} m: {len(todo_pass)} places, {len(batches)} queries")
-            found = 0
-            for n, batch in enumerate(batches, 1):
-                points = [
-                    (
-                        f["geometry"]["coordinates"][1],
-                        f["geometry"]["coordinates"][0],
-                        name_pattern(f["properties"]["name"]) if wide else None,
-                    )
-                    for f in batch
-                ]
-                elements = overpass(points, radius, client)
-                for f in batch:
-                    if match := best_match(f, elements, radius, min_score):
-                        f["properties"]["osm"] = match
-                        found += 1
-                if n % 20 == 0 or n == len(batches):
-                    print(f"  {n}/{len(batches)} queries, {found} matched")
-                    PLACES_FILE.write_text(
-                        json.dumps(collection, ensure_ascii=False, indent=2)
-                    )
+    try:
+        with httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=240) as client:
+            match_photon(collection, todo, client)
+            if not args.photon_only:
+                match_overpass(collection, todo, client)
+    finally:
+        # Also when stopped (Ctrl+C) or Overpass gives up: keep what was found.
+        save(collection)
 
     matched = sum("osm" in f["properties"] for f in features)
     print(f"done: {matched}/{len(features)} places have an OSM reference")
+
+
+def match_photon(collection: dict, todo: list[dict], client: httpx.Client) -> None:
+    todo = [f for f in todo if "photon" not in f["properties"].get("osm_tried", [])]
+    print(
+        f"Photon: {len(todo)} places, about {len(todo) * PHOTON_INTERVAL / 60:.0f} min"
+    )
+    found = 0
+    for n, f in enumerate(todo, 1):
+        elements = photon(f, client)
+        # Photon only gives the element's centre, so the same distances and
+        # name checks as the Overpass passes apply, closest first.
+        for radius, _, min_score, applies in PASSES:
+            if not applies(f["properties"].get("icon")):
+                continue
+            if match := best_match(f, elements, radius, min_score, "photon"):
+                f["properties"]["osm"] = match
+                found += 1
+                break
+        f["properties"].setdefault("osm_tried", []).append("photon")
+        if n % 100 == 0 or n == len(todo):
+            print(f"  {n}/{len(todo)} places, {found} matched")
+            save(collection)
+
+
+def match_overpass(collection: dict, todo: list[dict], client: httpx.Client) -> None:
+    for radius, batch_size, min_score, applies in PASSES:
+        todo = [f for f in todo if "osm" not in f["properties"]]
+        todo_pass = [
+            f
+            for f in todo
+            if applies(f["properties"].get("icon"))
+            and radius not in f["properties"].get("osm_tried", [])
+        ]
+        # Far around a point there are thousands of named things: past the
+        # first pass, only ask for those sharing a word with the place.
+        # (A place with no such word can only be found close by.)
+        wide = radius > PASSES[0][0]
+        if wide:
+            todo_pass = [f for f in todo_pass if name_pattern(f["properties"]["name"])]
+        # Sort roughly by location so each query covers one area.
+        todo_pass.sort(
+            key=lambda f: (
+                round(f["geometry"]["coordinates"][1]),
+                f["geometry"]["coordinates"][0],
+            )
+        )
+        batches = [
+            todo_pass[i : i + batch_size] for i in range(0, len(todo_pass), batch_size)
+        ]
+        print(f"pass {radius} m: {len(todo_pass)} places, {len(batches)} queries")
+        found = 0
+        for n, batch in enumerate(batches, 1):
+            points = [
+                (
+                    f["geometry"]["coordinates"][1],
+                    f["geometry"]["coordinates"][0],
+                    name_pattern(f["properties"]["name"]) if wide else None,
+                )
+                for f in batch
+            ]
+            elements = overpass(points, radius, client)
+            for f in batch:
+                f["properties"].setdefault("osm_tried", []).append(radius)
+                if match := best_match(f, elements, radius, min_score):
+                    f["properties"]["osm"] = match
+                    found += 1
+            if n % 20 == 0 or n == len(batches):
+                print(f"  {n}/{len(batches)} queries, {found} matched")
+                save(collection)
 
 
 if __name__ == "__main__":
