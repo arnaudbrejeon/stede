@@ -1,6 +1,6 @@
 import { useId, useState } from 'react'
 import type { TagLine } from '../places'
-import { tagColor, type TagColors } from '../tags'
+import { tagColor, tagLabel, type TagColors } from '../tags'
 
 // A folded line shows this many of its tags, then "+N".
 const SUMMARY_TAGS = 3
@@ -116,7 +116,7 @@ export function FilterPanel({
                     {selected.slice(0, SUMMARY_TAGS).map((tag) => (
                       <span key={tag} className="chip chip-static">
                         <span className="swatch" style={{ background: tagColor(tagColors, tag) }} />
-                        {tag}
+                        {tagLabel(tag)}
                       </span>
                     ))}
                     {hidden > 0 && <span className="fold-note">+{hidden}</span>}
@@ -148,7 +148,7 @@ export function FilterPanel({
                   onClick={() => toggleTag(index, tag)}
                 >
                   <span className="swatch" style={{ background: tagColor(tagColors, tag) }} />
-                  {tag}
+                  {tagLabel(tag)}
                 </button>
               ))}
             </div>

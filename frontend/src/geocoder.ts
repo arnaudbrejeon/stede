@@ -87,6 +87,13 @@ function resultKind(p: PhotonProperties): string | undefined {
   return words.charAt(0).toUpperCase() + words.slice(1)
 }
 
+// "12 Rue de Buci, 75006 Paris, France": the address saved with a place.
+export function streetAddress(p: PhotonProperties): string | null {
+  const town = [p.postcode, p.city ?? p.locality].filter(Boolean).join(' ')
+  const parts = [streetLine(p), town, p.country].filter((x): x is string => !!x)
+  return parts.length ? parts.join(', ') : null
+}
+
 function streetLine(p: PhotonProperties): string | undefined {
   if (!p.street) return undefined
   return p.housenumber ? `${p.housenumber} ${p.street}` : p.street

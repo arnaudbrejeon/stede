@@ -32,8 +32,8 @@ export type LngLat = [number, number]
 type PlacesMapProps = {
   ref?: Ref<PlacesMapHandle>
   places: Places
-  selectedId: number | null
-  onSelect: (id: number | null) => void
+  selectedId: string | null
+  onSelect: (id: string | null) => void
   // Opening saves the view; closing restores it.
   drawerOpen: boolean
   tagColors: TagColors
@@ -207,7 +207,7 @@ export function PlacesMap({
     map.on('click', (e) => {
       if (!map.getLayer('place-points')) return
       const [place] = map.queryRenderedFeatures(e.point, { layers: ['place-points'] })
-      if (place) return onSelectRef.current(place.properties.id as number)
+      if (place) return onSelectRef.current(place.properties.id as string)
       const [cluster] = map.queryRenderedFeatures(e.point, { layers: ['clusters'] })
       if (cluster) return
       if (onPinDropRef.current) onPinDropRef.current([e.lngLat.lng, e.lngLat.lat])
@@ -385,8 +385,8 @@ function insetOffset({ right, bottom }: Inset): [number, number] {
   return [-right / 2, -bottom / 2]
 }
 
-function selectedFilter(id: number | null): maplibregl.FilterSpecification {
-  return ['all', ['!', ['has', 'point_count']], ['==', ['get', 'id'], id ?? -1]]
+function selectedFilter(id: string | null): maplibregl.FilterSpecification {
+  return ['all', ['!', ['has', 'point_count']], ['==', ['get', 'id'], id ?? '']]
 }
 
 // Adds each feature's marker image name; MapLibre can't build it from an array.

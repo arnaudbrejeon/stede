@@ -1,11 +1,15 @@
 import type { Feature, FeatureCollection, Point } from 'geojson'
 import type { PlaceIconKey } from './placeIcons'
+import { DEFAULT_TAGS } from './tags'
 
 export type PlaceProperties = {
-  id: number
+  // The place event's `d` tag.
+  id: string
   name: string
   // OSM-style value (restaurant, museum…); picks the default icon.
   category: string
+  // The OSM key the category is a value of (amenity, shop…).
+  category_key?: string
   tags: string[]
   website: string | null
   address: string | null
@@ -22,13 +26,6 @@ export type Place = Feature<Point, PlaceProperties>
 export type Places = FeatureCollection<Point, PlaceProperties>
 
 export const NO_PLACES: Places = { type: 'FeatureCollection', features: [] }
-
-// Your saved places, served by the backend from data/mapstr.json.
-export async function fetchPlaces(signal?: AbortSignal): Promise<Places> {
-  const response = await fetch('/api/places', { signal })
-  if (!response.ok) throw new Error(`Loading places failed: ${response.status}`)
-  return response.json()
-}
 
 // Tags a place must all have; the tag filter is a list of these, any one of which may match.
 export type TagLine = ReadonlySet<string>
@@ -49,6 +46,9 @@ export function filterPlaces(places: Places, query: string, tagLines: readonly T
   }
 }
 
+// The labels in use: the built-in ones first in their own order, then yours A–Z.
 export function allTags(places: Places): string[] {
-  return [...new Set(places.features.flatMap((f) => f.properties.tags))].sort()
+  const used = new Set(places.features.flatMap((f) => f.properties.tags))
+  const builtIn = DEFAULT_TAGS.filter((t) => used.has(t))
+  return [...builtIn, ...[...used].filter((t) => !DEFAULT_TAGS.includes(t)).sort()]
 }

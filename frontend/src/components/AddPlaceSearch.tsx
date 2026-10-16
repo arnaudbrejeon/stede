@@ -9,6 +9,8 @@ import {
   type SearchResults,
 } from '../geocoder'
 import { PinDetails } from './PinDetails'
+import type { Place } from '../places'
+import type { TagColors } from '../tags'
 import type { LngLat } from './PlacesMap'
 import { ResultDetails } from './ResultDetails'
 
@@ -23,6 +25,9 @@ type AddPlaceSearchProps = {
   // A spot tapped on the map, shown in place of the search.
   pin: LngLat | null
   onClearPin: () => void
+  onSaved: (place: Place) => void
+  allLabels: readonly string[]
+  tagColors: TagColors
 }
 
 type Status = 'idle' | 'loading' | 'done' | 'error'
@@ -36,7 +41,16 @@ const GROUPS = [
 // Drawer content for finding a new place: a search field with the results listed
 // below it, or a pin dropped on the map. Arrow keys move through results, Enter
 // picks one.
-export function AddPlaceSearch({ getView, onPick, onPreview, pin, onClearPin }: AddPlaceSearchProps) {
+export function AddPlaceSearch({
+  getView,
+  onPick,
+  onPreview,
+  pin,
+  onClearPin,
+  onSaved,
+  allLabels,
+  tagColors,
+}: AddPlaceSearchProps) {
   const [text, setText] = useState('')
   const [found, setFound] = useState<SearchResults>(NO_RESULTS)
   const [status, setStatus] = useState<Status>('idle')
@@ -141,6 +155,9 @@ export function AddPlaceSearch({ getView, onPick, onPreview, pin, onClearPin }: 
       {pin ? (
         <PinDetails
           point={pin}
+          onSaved={onSaved}
+          allLabels={allLabels}
+          tagColors={tagColors}
           onBack={() => {
             onClearPin()
             inputRef.current?.focus({ preventScroll: true })
@@ -150,6 +167,9 @@ export function AddPlaceSearch({ getView, onPick, onPreview, pin, onClearPin }: 
         <ResultDetails
           key={resultKey(picked)}
           result={picked}
+          onSaved={onSaved}
+          allLabels={allLabels}
+          tagColors={tagColors}
           onBack={() => {
             setPicked(null)
             inputRef.current?.focus({ preventScroll: true })

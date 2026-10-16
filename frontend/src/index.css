@@ -468,10 +468,37 @@ body,
 .header-quote::after {
   color: var(--gold);
 }
+.header-key {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin-left: 12px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.header-key:hover {
+  background: var(--hover);
+}
+.header-key.unlocked {
+  color: var(--ink);
+}
+.header-key:focus-visible {
+  outline: 2px solid var(--rubric);
+  outline-offset: 1px;
+}
 /* No room beside the name on narrow screens. */
 @media (max-width: 720px) {
   .header-quote {
     display: none;
+  }
+  .header-key {
+    margin-left: auto;
   }
 }
 
@@ -723,4 +750,273 @@ body,
 .drawer-body a {
   font-size: 14px;
   color: var(--lapis);
+}
+
+.key-form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 12px;
+}
+.key-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  font-size: 14px;
+  color: var(--muted);
+}
+.key-form input {
+  width: 100%;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 15px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.key-form input:focus-visible {
+  outline: 2px solid var(--rubric);
+  outline-offset: 1px;
+}
+.key-note {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+.key-error {
+  margin: 0;
+  font-size: 14px;
+  color: var(--rubric);
+}
+.key-npub {
+  margin: 0;
+  font-family: ui-monospace, monospace;
+  font-size: 14px;
+}
+.key-button {
+  padding: 8px 16px;
+  font: inherit;
+  font-size: 15px;
+  color: var(--panel);
+  background: var(--ink);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.key-button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.save-place,
+.place-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 16px;
+}
+/* Last in the adding drawer, just below the details. */
+.save-place {
+  margin-top: 12px;
+}
+.danger-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px 8px 12px;
+  font: inherit;
+  font-size: 15px;
+  color: #fff;
+  background: var(--rubric);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.danger-button:hover {
+  background: color-mix(in srgb, var(--rubric) 85%, var(--ink));
+}
+.danger-button:focus-visible {
+  outline: 2px solid var(--rubric);
+  outline-offset: 2px;
+}
+.danger-button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+/* The user's own fields on a place: name, icon, labels, comment. */
+.place-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.field input,
+.field textarea {
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 15px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.field textarea {
+  resize: vertical;
+}
+.field input:focus-visible,
+.field textarea:focus-visible,
+.icon-current:focus-visible,
+.icon-choice:focus-visible {
+  outline: 2px solid var(--rubric);
+  outline-offset: 1px;
+}
+.label-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.label-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.label-toggle:hover {
+  background: var(--hover);
+}
+.label-toggle[aria-pressed='true'] {
+  background: var(--hover);
+  border-color: var(--ink);
+}
+.label-toggle:focus-visible,
+.star:focus-visible {
+  outline: 2px solid var(--rubric);
+  outline-offset: 1px;
+}
+.stars {
+  display: inline-flex;
+  margin-left: 4px;
+}
+.star {
+  width: 28px;
+  height: 30px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+  color: color-mix(in srgb, var(--muted) 45%, var(--panel));
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+/* Gold leaf deepened towards ink: plain gold is too light against the panel. */
+.star.on {
+  color: color-mix(in srgb, var(--gold) 75%, var(--ink));
+}
+.star:hover {
+  background: var(--hover);
+}
+.field .label-new {
+  margin-top: 2px;
+}
+.field-label {
+  font-size: 14px;
+}
+.icon-current {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 15px;
+  color: var(--ink);
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.icon-change {
+  margin-left: auto;
+  font-size: 14px;
+  color: var(--lapis);
+}
+/* Every icon, four to a row. */
+.icon-picker {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.icon-choice {
+  --icon-bg: var(--panel);
+  display: grid;
+  place-items: center;
+  height: 48px;
+  padding: 0;
+  color: var(--ink);
+  background: var(--icon-bg);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.icon-choice:hover {
+  --icon-bg: var(--hover);
+}
+.icon-choice[aria-pressed='true'] {
+  --icon-bg: var(--hover);
+  border-color: var(--rubric);
+}
+.glyph-hole {
+  fill: var(--icon-bg, var(--panel));
+}
+.key-button.with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 12px;
+}
+.place-actions.row {
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+}
+.place-editor h2 {
+  margin: 0 36px 4px 0;
+}
+.places-error {
+  position: absolute;
+  z-index: 3;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 8px 14px;
+  font-size: 14px;
+  color: var(--panel);
+  background: var(--rubric);
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(var(--shadow), 0.2);
 }
