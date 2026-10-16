@@ -1,0 +1,2 @@
+# Pubkeys (64-char hex, one per line) allowed to write to the stede relay.
+# Lines starting with # are ignored. The relay reads this file at startup.

@@ -1,0 +1,17 @@
+# The stede relay: strfry restricted to place events (see relay/).
+#   docker compose up --build relay
+# Writes need the author's pubkey in relay/authors.txt, or STEDE_RELAY_OPEN_WRITES=1 in development.
+services:
+  relay:
+    build: ./relay
+    ports:
+      - "7777:7777"
+    volumes:
+      - relay-db:/app/strfry-db
+      - ./relay/authors.txt:/app/authors.txt:ro
+    environment:
+      STEDE_RELAY_OPEN_WRITES: ${STEDE_RELAY_OPEN_WRITES:-0}
+    restart: unless-stopped
+
+volumes:
+  relay-db:

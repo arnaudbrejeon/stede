@@ -1,0 +1,2 @@
+# The policy runs on the relay image's python3 (Alpine 3.18 → 3.11), not the backend's.
+target-version = "py311"
