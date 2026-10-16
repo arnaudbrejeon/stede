@@ -5,6 +5,7 @@ import { ICON_CATEGORIES, PLACE_ICONS, type PlaceIcon, type PlaceIconKey } from 
 import {
   BEEN_THERE,
   DEFAULT_TAGS,
+  sameLabel,
   STAR_TAGS,
   starsOf,
   tagColor,
@@ -129,11 +130,13 @@ function LabelsField({
     onChange(labels.includes(label) ? labels.filter((l) => l !== label) : [...labels, label])
   // Built-in labels keep their rules (see withDefaultTag).
   const setDefault = (tag: string) => onChange(withDefaultTag(labels, tag, !labels.includes(tag)))
-  // Labels are stored lowercase (NIP-XX Places `t` tags).
+  // Kept as typed; a label you already have (in any case) is reused.
   const create = () => {
-    const label = text.trim().toLowerCase()
+    const typed = text.trim()
     setText('')
-    if (!label || labels.includes(label)) return
+    if (!typed) return
+    const label = [...DEFAULT_TAGS, ...allLabels].find((l) => sameLabel(l, typed)) ?? typed
+    if (labels.some((l) => sameLabel(l, label))) return
     onChange(DEFAULT_TAGS.includes(label) ? withDefaultTag(labels, label, true) : [...labels, label])
   }
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {

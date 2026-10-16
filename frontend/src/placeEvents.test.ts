@@ -25,7 +25,7 @@ const orsay: PlaceDraft & { id: string } = {
   osmType: 'W',
   osmId: 24983713,
   address: "1 Rue de la Légion d'Honneur, 75007 Paris, France",
-  labels: ['Art', 'to try', 'art'],
+  labels: ['Art', 'to try', 'art', 'Best OC'],
   note: 'Thursday evenings are quieter.',
   icon: 'museum',
 }
@@ -43,8 +43,9 @@ describe('place events', () => {
       ['g', 'u09tuy'],
       ['g', 'u09tuywnq'],
       ['location', "1 Rue de la Légion d'Honneur, 75007 Paris, France"],
-      ['t', 'art'],
-      ['t', 'to try'],
+      ['t', 'Art'],
+      ['t', 'To try'],
+      ['t', 'Best OC'],
       ['i', 'osm:way/24983713'],
       ['k', 'osm'],
       ['osm:tourism', 'museum'],
@@ -61,7 +62,7 @@ describe('place events', () => {
       name: "Musée d'Orsay",
       category: 'museum',
       category_key: 'tourism',
-      tags: ['art', 'to try'],
+      tags: ['Art', 'To try', 'Best OC'],
       website: null,
       address: orsay.address,
       comment: 'Thursday evenings are quieter.',
@@ -71,7 +72,7 @@ describe('place events', () => {
     })
     // Saving it again keeps everything.
     expect(innerPlace(draftFromPlace(place))).toEqual(
-      innerPlace({ ...orsay, labels: ['art', 'to try'] }),
+      innerPlace(orsay),
     )
   })
 

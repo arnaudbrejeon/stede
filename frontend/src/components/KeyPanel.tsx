@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import * as nip19 from 'nostr-tools/nip19'
+import { PlacesData } from './PlacesData'
 import {
   checkPassword,
   forgetKey,
@@ -139,6 +140,7 @@ function Unlocked({ pubkey }: { pubkey: string }) {
         Lock
       </button>
       <ForgetButton />
+      <PlacesData />
     </div>
   )
 }

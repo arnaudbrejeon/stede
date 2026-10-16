@@ -1,6 +1,7 @@
 import { finalizeEvent, getPublicKey, nip44, type NostrEvent } from 'nostr-tools'
 import type { PlaceIconKey } from './placeIcons'
 import type { Place } from './places'
+import { uniqueLabels } from './tags'
 
 // Places as Nostr events: NIP-XX Places (https://github.com/nostr-protocol/nips/issues/2492).
 //
@@ -82,9 +83,7 @@ export function placeTags(draft: PlaceDraft & { id: string }): string[][] {
     ...[4, 6, 9].map((length) => ['g', geohash(lat, lng, length)]),
   ]
   if (draft.address) tags.push(['location', draft.address])
-  for (const label of new Set((draft.labels ?? []).map((l) => l.trim().toLowerCase()))) {
-    if (label) tags.push(['t', label])
-  }
+  for (const label of uniqueLabels(draft.labels ?? [])) tags.push(['t', label])
   const osmType = draft.osmType && OSM_TYPES[draft.osmType]
   if (osmType && draft.osmId) {
     tags.push(['i', `${OSM_ID_KIND}:${osmType}/${draft.osmId}`], ['k', OSM_ID_KIND])
@@ -96,6 +95,30 @@ export function placeTags(draft: PlaceDraft & { id: string }): string[][] {
 
 export function innerPlace(draft: PlaceDraft & { id: string }): InnerPlace {
   return { kind: PLACE_KIND, tags: placeTags(draft), content: draft.note?.trim() ?? '' }
+}
+
+// Tags the app writes from a draft. Any other tag (another app's label, an OSM
+// value you set, an unknown tag) is carried over when a place is saved again.
+const MANAGED_TAGS = new Set(['d', 'name', 'geo', 'g', 'location', 't', 'i', 'k'])
+
+// A new version of a place: the draft's tags plus the previous version's tags
+// the app doesn't manage.
+export function keepUnmanagedTags(next: InnerPlace, previous: InnerPlace | undefined): InnerPlace {
+  if (!previous) return next
+  // Labels (L/l) are told apart by namespace, not by tag name.
+  const written = new Set(next.tags.map((t) => t[0]).filter((name) => name !== 'L' && name !== 'l'))
+  const isIconLabel = (t: string[]) =>
+    (t[0] === 'L' && t[1] === ICON_LABEL) || (t[0] === 'l' && t[2] === ICON_LABEL)
+  const kept = previous.tags.filter(
+    (t) => !MANAGED_TAGS.has(t[0]) && !written.has(t[0]) && !isIconLabel(t),
+  )
+  // An `L` namespace tag is only kept once, however many labels use it.
+  const tags = [...next.tags]
+  for (const tag of kept) {
+    if (tag[0] === 'L' && tags.some((t) => t[0] === 'L' && t[1] === tag[1])) continue
+    tags.push(tag)
+  }
+  return { ...next, tags }
 }
 
 // The app's view of a decrypted place; null when it isn't a valid place.
@@ -179,16 +202,24 @@ export function openPlace(event: NostrEvent, key: Uint8Array): InnerPlace {
   return inner
 }
 
-// NIP-09 deletion request for a private place. It only covers versions dated
-// up to its own created_at.
-export function deletionEvent(id: string, secretKey: Uint8Array, createdAt = now()): NostrEvent {
-  const address = `${PRIVATE_PLACE_KIND}:${getPublicKey(secretKey)}:${id}`
+// NIP-09 deletion request for private places (one event can carry hundreds).
+// It only covers versions dated up to its own created_at, and relays then refuse
+// versions of those places dated up to it.
+export function deletionEvent(
+  ids: string | readonly string[],
+  secretKey: Uint8Array,
+  createdAt = now(),
+): NostrEvent {
+  const pubkey = getPublicKey(secretKey)
   return finalizeEvent(
     {
       kind: DELETION_KIND,
       created_at: createdAt,
       tags: [
-        ['a', address],
+        ...(typeof ids === 'string' ? [ids] : ids).map((id) => [
+          'a',
+          `${PRIVATE_PLACE_KIND}:${pubkey}:${id}`,
+        ]),
         ['k', String(PRIVATE_PLACE_KIND)],
       ],
       content: '',

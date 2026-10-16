@@ -38,10 +38,11 @@ export function tagColor(colors: TagColors, tag: string): string {
   return colors.get(tag) ?? UNTAGGED_COLOR
 }
 
-// Labels every user has: whether you've been, and a rating out of five. Stored
-// lowercase like any label (NIP-XX Places `t` tags).
-export const TO_TRY = 'to try'
-export const BEEN_THERE = 'been there'
+// Labels every user has: whether you've been, and a rating out of five. Labels
+// keep the case they were written in ("Best OC"); two labels that differ only in
+// case are the same label (see sameLabel).
+export const TO_TRY = 'To try'
+export const BEEN_THERE = 'Been there'
 export const STAR_TAGS = [1, 2, 3, 4, 5].map((n) => (n === 1 ? '1 star' : `${n} stars`))
 export const DEFAULT_TAGS = [TO_TRY, BEEN_THERE, ...STAR_TAGS]
 
@@ -62,9 +63,24 @@ export function withDefaultTag(labels: readonly string[], tag: string, on: boole
   return [...others, ...(others.includes(BEEN_THERE) ? [] : [BEEN_THERE]), tag]
 }
 
-// How a label reads: "To try", "★★★" for "3 stars".
+// How a label reads: as written, and "★★★" for "3 stars".
 export function tagLabel(tag: string): string {
   const stars = STAR_TAGS.indexOf(tag) + 1
-  if (stars) return '★'.repeat(stars)
-  return tag.charAt(0).toUpperCase() + tag.slice(1)
+  return stars ? '★'.repeat(stars) : tag
+}
+
+export function sameLabel(a: string, b: string): boolean {
+  return a.localeCompare(b, undefined, { sensitivity: 'accent' }) === 0
+}
+
+// Labels without repeats, ignoring case; the first spelling wins, and the
+// built-in labels take their own spelling ("to try" becomes "To try").
+export function uniqueLabels(labels: readonly string[]): string[] {
+  const out: string[] = []
+  for (const raw of labels) {
+    const label = raw.trim()
+    if (!label || out.some((l) => sameLabel(l, label))) continue
+    out.push(DEFAULT_TAGS.find((t) => sameLabel(t, label)) ?? label)
+  }
+  return out
 }

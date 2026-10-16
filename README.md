@@ -79,3 +79,18 @@ that saves, edits and deletes places on the relay.
 The first build compiles strfry from source (a few minutes). Events live in the
 `relay-db` Docker volume. The policy is read by strfry at startup, so restart
 the relay after editing `relay/authors.txt`.
+
+## Importing your Mapstr places
+
+Your key drawer (the padlock) has Export, Import and Delete all. The file they
+use holds each place as its NIP-XX Places event, unencrypted (see
+`frontend/src/placesFile.ts`). To bring in a Mapstr export enriched by the
+scripts in `backend/scripts/`:
+
+```sh
+cd backend && uv run python scripts/mapstr_to_stede.py   # data/mapstr.json -> data/stede-places.json
+```
+
+then import `data/stede-places.json` in the app. Importing merges duplicates
+(same name, and the same OpenStreetMap object or within 100 m) and updates
+places you already have instead of copying them.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BEEN_THERE, starsOf, tagLabel, TO_TRY, withDefaultTag } from './tags'
+import { BEEN_THERE, starsOf, tagLabel, TO_TRY, uniqueLabels, withDefaultTag } from './tags'
 
 describe('default tags', () => {
   it('keeps "to try" and "been there" apart', () => {
@@ -19,9 +19,17 @@ describe('default tags', () => {
     expect(withDefaultTag([BEEN_THERE, '3 stars'], '3 stars', false)).toEqual([BEEN_THERE])
   })
 
-  it('reads labels nicely', () => {
-    expect(tagLabel('to try')).toBe('To try')
+  it('reads labels as written, ratings as stars', () => {
+    expect(tagLabel('Best OC')).toBe('Best OC')
     expect(tagLabel('1 star')).toBe('★')
     expect(tagLabel('5 stars')).toBe('★★★★★')
+  })
+
+  it('keeps the case of labels but not repeats', () => {
+    expect(uniqueLabels(['Best OC', 'best oc', ' to try ', 'Art', 'art', ''])).toEqual([
+      'Best OC',
+      'To try',
+      'Art',
+    ])
   })
 })

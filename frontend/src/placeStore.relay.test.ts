@@ -71,4 +71,83 @@ describe.skipIf(!HOST)('places on the relay', () => {
     await store.loadPlaces()
     expect(getPlaces().places.features.map((f) => f.properties.name)).toEqual(['Orsay'])
   }, 30000)
+
+  it('imports, exports, deletes all and imports again', async () => {
+    const keystore = await import('./keystore')
+    const store = await import('./placeStore')
+    const { innerPlace } = await import('./placeEvents')
+    await keystore.importKey(nip19.nsecEncode(generateSecretKey()), 'pw')
+    await vi.waitFor(() => expect(store.getPlacesState().status).toBe('ready'))
+
+    const places = Array.from({ length: 30 }, (_, i) => ({
+      ...innerPlace({
+        id: `p${i}`,
+        name: `Place ${i}`,
+        lngLat: [2 + i / 10, 48],
+        labels: ['To try'],
+      }),
+      created_at: 1,
+    }))
+    // A duplicate of the first place, with a comment to merge in.
+    places.push({
+      ...innerPlace({ id: 'dup', name: 'place 0', lngLat: [2, 48], note: 'Merged' }),
+      created_at: 1,
+    })
+    const file = JSON.stringify({ format: 'stede-places', version: 1, exported_at: 1, places })
+
+    const first = await store.importPlaces(file)
+    expect(first).toMatchObject({ added: 30, merged: 1, failed: 0 })
+    const exported = store.exportPlaces()
+    expect(exported.places).toHaveLength(30)
+    expect(exported.places.find((p) => p.tags[0][1] === 'p0')!.content).toBe('Merged')
+
+    // A fresh session reads them all back from the relay.
+    await keystore.lock()
+    await keystore.unlock('pw')
+    await vi.waitFor(() => expect(store.getPlacesState().status).toBe('ready'))
+    expect(store.getPlacesState().places.features).toHaveLength(30)
+
+    expect(await store.deleteAllPlaces()).toBe(30)
+    await store.loadPlaces()
+    expect(store.getPlacesState().places.features).toHaveLength(0)
+
+    // Deleted addresses are refused by the relay, so the import gives them new ones.
+    const again = await store.importPlaces(JSON.stringify(exported))
+    expect(again).toMatchObject({ added: 30, failed: 0 })
+    await store.loadPlaces()
+    expect(store.getPlacesState().places.features).toHaveLength(30)
+  }, 60000)
+
+  it('cancels an import and finishes it when imported again', async () => {
+    const keystore = await import('./keystore')
+    const store = await import('./placeStore')
+    const { innerPlace } = await import('./placeEvents')
+    await keystore.importKey(nip19.nsecEncode(generateSecretKey()), 'pw')
+    await vi.waitFor(() => expect(store.getPlacesState().status).toBe('ready'))
+    const places = Array.from({ length: 200 }, (_, i) => ({
+      ...innerPlace({ id: `c${i}`, name: `Cancel ${i}`, lngLat: [2 + i / 100, 47] }),
+      created_at: 1,
+    }))
+    const file = JSON.stringify({ format: 'stede-places', version: 1, exported_at: 1, places })
+
+    const controller = new AbortController()
+    const cancelled = await store.importPlaces(
+      file,
+      (done) => done >= 50 && controller.abort(),
+      controller.signal,
+    )
+    expect(cancelled.cancelled).toBe(true)
+    expect(cancelled.saved).toBeLessThan(200)
+    expect(store.getPlacesState().places.features).toHaveLength(cancelled.saved)
+
+    const rest = await store.importPlaces(file)
+    expect(rest).toMatchObject({
+      cancelled: false,
+      added: 200 - cancelled.saved,
+      unchanged: cancelled.saved,
+    })
+    await store.loadPlaces()
+    expect(store.getPlacesState().places.features).toHaveLength(200)
+    await store.deleteAllPlaces()
+  }, 60000)
 })
