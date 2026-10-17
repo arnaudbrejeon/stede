@@ -121,8 +121,9 @@ export function PlacesMap({
   useEffect(() => {
     const map = new maplibregl.Map({
       container: containerRef.current!,
-      center: [2.345, 48.86],
-      zoom: 13,
+      // Westminster Abbey, where Chaucer is buried (Poets' Corner).
+      center: [-0.12731, 51.49929],
+      zoom: 15,
       // Always north-up and flat: rotating or tilting a map of places only happens
       // by accident (a two-finger twist), and there'd be no compass to undo it.
       dragRotate: false,
