@@ -71,35 +71,41 @@ export function PlaceDetails({ place, tagColors, allLabels, onDeleted }: PlaceDe
           Website
         </a>
       )}
-      <div className="place-actions">
-        <button type="button" className="key-button with-icon" onClick={() => setEditing(true)}>
-          <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
-            <path
-              d="M12.5 4.5l3 3M4 16l.7-3.6L13.2 4a1.4 1.4 0 0 1 2 0l.8.8a1.4 1.4 0 0 1 0 2L7.6 15.3Z"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          Edit
-        </button>
-        <button type="button" className="danger-button" disabled={deleting} onClick={remove}>
-          <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
-            <path
-              d="M3.5 5.5h13M8 5.5V3.75h4V5.5M5 5.5l.8 10.2a1.5 1.5 0 0 0 1.5 1.3h5.4a1.5 1.5 0 0 0 1.5-1.3L15 5.5M8.25 8.5v5.5M11.75 8.5v5.5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          {deleting ? 'Deleting…' : 'Delete place'}
-        </button>
-        {error && <p className="key-error">{error}</p>}
-      </div>
+      {p.builtin ? (
+        <p className="builtin-note">
+          Stede’s first place, until you have your own: tap + to add one.
+        </p>
+      ) : (
+        <div className="place-actions">
+          <button type="button" className="key-button with-icon" onClick={() => setEditing(true)}>
+            <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
+              <path
+                d="M12.5 4.5l3 3M4 16l.7-3.6L13.2 4a1.4 1.4 0 0 1 2 0l.8.8a1.4 1.4 0 0 1 0 2L7.6 15.3Z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            Edit
+          </button>
+          <button type="button" className="danger-button" disabled={deleting} onClick={remove}>
+            <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
+              <path
+                d="M3.5 5.5h13M8 5.5V3.75h4V5.5M5 5.5l.8 10.2a1.5 1.5 0 0 0 1.5 1.3h5.4a1.5 1.5 0 0 0 1.5-1.3L15 5.5M8.25 8.5v5.5M11.75 8.5v5.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            {deleting ? 'Deleting…' : 'Delete place'}
+          </button>
+          {error && <p className="key-error">{error}</p>}
+        </div>
+      )}
     </>
   )
 }

@@ -9,13 +9,15 @@ import { PlacesMap, type LngLat, type PlacesMapHandle } from './components/Place
 import type { GeocodeResult } from './geocoder'
 import { useKey } from './keystore'
 import { usePlaces } from './placeStore'
+import { withWelcome } from './welcomePlace'
 import { allTags, filterPlaces, type Place, type TagLine } from './places'
 import { buildTagColors } from './tags'
 import { useHiddenBottom } from './useHiddenBottom'
 
 function App() {
   // Your places from the relay, once the key is unlocked (see placeStore.ts).
-  const { places, error: placesError } = usePlaces()
+  const { places: yours, status: placesStatus, error: placesError } = usePlaces()
+  const places = useMemo(() => withWelcome(yours, placesStatus === 'loading'), [yours, placesStatus])
   const [query, setQuery] = useState('')
   const [tagLines, setTagLines] = useState<TagLine[]>([new Set()])
   const [selectedId, setSelectedId] = useState<string | null>(null)

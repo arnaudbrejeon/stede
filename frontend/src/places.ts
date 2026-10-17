@@ -20,6 +20,8 @@ export type PlaceProperties = {
   osm_id?: number
   // Icon chosen for this place, overriding its category's default.
   icon?: PlaceIconKey
+  // Drawn by the app (see welcomePlace.ts), not one of your places.
+  builtin?: boolean
 }
 
 export type Place = Feature<Point, PlaceProperties>
