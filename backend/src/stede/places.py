@@ -167,7 +167,8 @@ def category_for(props: dict[str, Any]) -> str:
     """The OSM-style category a Mapstr place belongs to.
 
     Tried in order: the place itself (PLACE_CATEGORIES), your tags
-    (TAG_CATEGORIES), then Mapstr's icon (MAPSTR_CATEGORIES).
+    (TAG_CATEGORIES), the OSM element it was matched to (scripts/match_osm.py),
+    then Mapstr's icon (MAPSTR_CATEGORIES).
     """
     name = props.get("name") or ""
     if name in PLACE_CATEGORIES:
@@ -176,6 +177,9 @@ def category_for(props: dict[str, Any]) -> str:
     for tag, category in TAG_CATEGORIES.items():
         if tag in tags:
             return category
+    kind = (props.get("osm") or {}).get("kind")
+    if kind:
+        return kind[1]
     return MAPSTR_CATEGORIES.get(props.get("icon") or "", "")
 
 

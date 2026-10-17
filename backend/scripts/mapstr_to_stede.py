@@ -7,6 +7,8 @@ data/mapstr.json is only read.
     cd backend
     uv run python scripts/mapstr_to_stede.py                   # -> data/stede-places.json
     uv run python scripts/mapstr_to_stede.py -o ~/places.json  # elsewhere
+    uv run python scripts/mapstr_to_stede.py -i ../data/mapstr.json ../data/pindrop.json
+                                                     # several exports, duplicates merged
 """
 
 import argparse
@@ -14,7 +16,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from stede.places_file import from_mapstr
+from stede.places_file import from_exports
 
 ROOT = Path(__file__).resolve().parents[2]
 PLACES_FILE = ROOT / "data" / "mapstr.json"
@@ -24,23 +26,31 @@ OUTPUT_FILE = ROOT / "data" / "stede-places.json"
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument(
-        "-i", "--input", type=Path, default=PLACES_FILE, help="Mapstr export"
+        "-i",
+        "--input",
+        type=Path,
+        nargs="+",
+        default=[PLACES_FILE],
+        help="exports, Mapstr-shaped (see scripts/pindrop_import.py); "
+        "places in a later one that duplicate an earlier one are merged into it",
     )
     parser.add_argument(
         "-o", "--output", type=Path, default=OUTPUT_FILE, help="places file"
     )
     args = parser.parse_args()
 
-    export = json.loads(args.input.read_text())
-    converted = from_mapstr(export)
+    exports = [json.loads(path.read_text()) for path in args.input]
+    converted = from_exports(exports)
     args.output.write_text(json.dumps(converted, ensure_ascii=False, indent=1))
 
     places = converted["places"]
     tag_names = Counter(t[0] for p in places for t in p["tags"])
-    skipped = len(export.get("features", [])) - len(places)
-    print(f"{len(places)} places written to {args.output}")
-    if skipped:
-        print(f"{skipped} skipped (no name or position)")
+    read = sum(len(e.get("features", [])) for e in exports)
+    print(f"{read} places read, {len(places)} written to {args.output}")
+    if read > len(places):
+        print(
+            f"{read - len(places)} merged into a duplicate or skipped (no name or position)"
+        )
     print(
         f"{tag_names['t']} labels ({len(converted['labels'])} distinct), "
         f"{tag_names['i']} OSM links, {tag_names['location']} addresses, "

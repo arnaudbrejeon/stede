@@ -23,6 +23,7 @@ well. A copy of the original file is kept next to it as mapstr.json.bak.
     uv run python scripts/match_osm.py --limit 200  # try it on a sample
     uv run python scripts/match_osm.py --photon-only  # skip Overpass for now
     uv run python scripts/match_osm.py --redo     # look for every place again
+    uv run python scripts/match_osm.py --file ../data/pindrop.json  # another file
 """
 
 import argparse
@@ -80,6 +81,27 @@ PASSES = [
     (400, 15, 0.9, lambda icon: icon not in LARGE_ICONS),
     (2000, 10, 0.9, lambda icon: icon in LARGE_ICONS),
 ]
+
+# OSM keys whose value says what a place is, in the order they're tried.
+KIND_KEYS = (
+    "amenity",
+    "shop",
+    "tourism",
+    "leisure",
+    "craft",
+    "office",
+    "healthcare",
+    "historic",
+    "natural",
+    "sport",
+    "public_transport",
+    "railway",
+    "aeroway",
+    "man_made",
+    "waterway",
+    "landuse",
+    "building",
+)
 
 NAME_TAGS = (
     "name",
@@ -326,7 +348,7 @@ def best_match(
     if best is None:
         return None
     _, el, dist, sim = best
-    return {
+    match = {
         "type": el["type"],
         "id": el["id"],
         "name": el["tags"].get("name"),
@@ -334,6 +356,11 @@ def best_match(
         "score": round(sim, 2),
         "source": source,
     }
+    # What the element is (amenity=restaurant…), for places without a category.
+    tags = el.get("tags", {})
+    if key := next((k for k in KIND_KEYS if tags.get(k)), None):
+        match["kind"] = [key, tags[key]]
+    return match
 
 
 def save(collection: dict) -> None:
@@ -346,7 +373,14 @@ def save(collection: dict) -> None:
 
 
 def main() -> None:
+    global PLACES_FILE
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument(
+        "--file",
+        type=Path,
+        default=PLACES_FILE,
+        help="places file (default: mapstr.json)",
+    )
     parser.add_argument("--limit", type=int, help="only look at the first N places")
     parser.add_argument(
         "--redo",
@@ -359,6 +393,7 @@ def main() -> None:
         help="only search Photon, leave Overpass for a later run",
     )
     args = parser.parse_args()
+    PLACES_FILE = args.file.resolve()
 
     collection = json.loads(PLACES_FILE.read_text())
     features = collection["features"][: args.limit]

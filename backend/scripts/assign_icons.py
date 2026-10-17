@@ -19,6 +19,7 @@ whole file as it goes and would drop the icons.
     uv run python scripts/assign_icons.py           # places without an icon
     uv run python scripts/assign_icons.py --redo    # decide every place again
     uv run python scripts/assign_icons.py --dry-run # show what would change
+    uv run python scripts/assign_icons.py --file ../data/pindrop.json  # another file
 """
 
 import argparse
@@ -36,7 +37,14 @@ ICON_CATEGORIES_FILE = ROOT / "frontend" / "src" / "placeIconCategories.json"
 
 
 def main() -> None:
+    global PLACES_FILE
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument(
+        "--file",
+        type=Path,
+        default=PLACES_FILE,
+        help="places file (default: mapstr.json)",
+    )
     parser.add_argument(
         "--redo",
         action="store_true",
@@ -48,6 +56,7 @@ def main() -> None:
         help="count the changes without writing the file",
     )
     args = parser.parse_args()
+    PLACES_FILE = args.file.resolve()
 
     mapping = json.loads(ICON_CATEGORIES_FILE.read_text())
     collection = json.loads(PLACES_FILE.read_text())
@@ -64,6 +73,10 @@ def main() -> None:
         group = mapping["values"].get(category, "other")
         icon = mapping["defaults"][group]
         f["properties"]["stede"] = {"category": category, "icon": icon}
+        # A category from the matched OSM element knows its key (amenity…).
+        kind = (f["properties"].get("osm") or {}).get("kind")
+        if kind and kind[1] == category:
+            f["properties"]["stede"]["category_key"] = kind[0]
         icons[icon] += 1
 
     print(f"{len(todo)} of {len(features)} places decided")

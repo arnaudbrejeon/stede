@@ -22,8 +22,12 @@ gives the same places, and importing again updates them instead of adding
 copies. The app merges duplicates when importing.
 """
 
+import math
+import re
 import time
+import unicodedata
 import uuid
+from datetime import datetime
 from typing import Any
 
 FILE_FORMAT = "stede-places"
@@ -99,20 +103,41 @@ GEOHASH_ALPHABET = "0123456789bcdefghjkmnpqrstuvwxyz"
 
 def from_mapstr(export: dict[str, Any], now: int | None = None) -> dict[str, Any]:
     """The places file for a Mapstr export (as enriched by the stede scripts)."""
+    return from_exports([export], now)
+
+
+def from_exports(
+    exports: list[dict[str, Any]], now: int | None = None
+) -> dict[str, Any]:
+    """One places file for several exports (Mapstr, Pindrop via
+    scripts/pindrop_import.py), with duplicates merged into the first place
+    seen: same name and the same OSM element or within 100 m, as the app does
+    on import (frontend/src/placesFile.ts)."""
     created_at = int(time.time()) if now is None else now
-    places = []
+    places: list[dict[str, Any]] = []
     labels: dict[str, dict[str, str]] = {}
     used_ids: set[str] = set()
-    for feature in export.get("features", []):
-        place = to_place(feature, used_ids)
-        if place is None:
-            continue
-        place["created_at"] = created_at
-        places.append(place)
-        for tag in feature["properties"].get("tags") or []:
-            name = (tag.get("name") or "").strip()
-            if name and tag.get("color") and name not in labels:
-                labels[name] = {"color": tag["color"]}
+    by_name: dict[str, list[dict[str, Any]]] = {}
+    for export in exports:
+        for feature in export.get("features", []):
+            place = to_place(feature, used_ids)
+            if place is None:
+                continue
+            place.setdefault("created_at", created_at)
+            key = normalise(tag_value(place, "name") or "")
+            same = next(
+                (p for p in by_name.get(key, []) if is_duplicate(p, place)), None
+            )
+            if same is not None:
+                merged = merge_places(same, place)
+                same["tags"], same["content"] = merged["tags"], merged["content"]
+            else:
+                places.append(place)
+                by_name.setdefault(key, []).append(place)
+            for tag in feature["properties"].get("tags") or []:
+                name = (tag.get("name") or "").strip()
+                if name and tag.get("color") and name not in labels:
+                    labels[name] = {"color": tag["color"]}
     return {
         "format": FILE_FORMAT,
         "version": FILE_VERSION,
@@ -133,8 +158,15 @@ def to_place(feature: dict[str, Any], used_ids: set[str]) -> dict[str, Any] | No
     if not name or not (-90 <= lat <= 90 and -180 <= lon <= 180):
         return None
 
+    pindrop = props.get("pindrop") or {}
+    own_id = pindrop.get("id")
+    if own_id and own_id not in used_ids:
+        used_ids.add(own_id)
+        d = own_id
+    else:
+        d = place_id(name, lat, lon, used_ids)
     tags = [
-        ["d", place_id(name, lat, lon, used_ids)],
+        ["d", d],
         ["name", name],
         ["geo", f"{round(lat, 7)},{round(lon, 7)}"],
         *(["g", geohash(lat, lon, length)] for length in (4, 6, 9)),
@@ -153,18 +185,27 @@ def to_place(feature: dict[str, Any], used_ids: set[str]) -> dict[str, Any] | No
         tags += [["i", f"osm:{osm['type']}/{osm['id']}"], ["k", "osm"]]
     recorded = props.get("stede") or {}
     category = recorded.get("category")
-    if category in CATEGORY_KEYS:
-        tags.append([f"osm:{CATEGORY_KEYS[category]}", category])
+    category_key = recorded.get("category_key") or CATEGORY_KEYS.get(category or "")
+    if category and category_key:
+        tags.append([f"osm:{category_key}", category])
     if recorded.get("icon"):
         tags += [["L", ICON_LABEL], ["l", recorded["icon"], ICON_LABEL]]
     if props.get("icon"):
         tags += [["L", MAPSTR_ICON_LABEL], ["l", props["icon"], MAPSTR_ICON_LABEL]]
+    pindrop = props.get("pindrop") or {}
+    tags += [["image", url] for url in pindrop.get("photos") or []]
 
-    return {
+    place: dict[str, Any] = {
         "kind": PLACE_KIND,
         "tags": tags,
         "content": (props.get("userComment") or "").strip(),
     }
+    if dropped := pindrop.get("date_dropped"):
+        try:
+            place["created_at"] = int(datetime.fromisoformat(dropped).timestamp())
+        except ValueError:
+            pass
+    return place
 
 
 def place_id(name: str, lat: float, lon: float, used: set[str]) -> str:
@@ -197,3 +238,68 @@ def geohash(lat: float, lon: float, length: int) -> str:
             out.append(GEOHASH_ALPHABET[bits])
             bits = bit = 0
     return "".join(out)
+
+
+DUPLICATE_DISTANCE_M = 100
+
+
+def normalise(name: str) -> str:
+    """ "Gili-Gili" and "gili gili" are the same name (as the app's normalizeName)."""
+    name = unicodedata.normalize("NFD", name)
+    name = "".join(c for c in name if not unicodedata.combining(c)).lower()
+    return re.sub(r"[^\w]+|_", " ", name).strip()
+
+
+def tag_value(place: dict[str, Any], name: str) -> str | None:
+    return next((t[1] for t in place["tags"] if t[0] == name), None)
+
+
+def is_duplicate(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    """Same name, and the same OSM element or close by (as the app's isDuplicate)."""
+    if normalise(tag_value(a, "name") or "") != normalise(tag_value(b, "name") or ""):
+        return False
+    osm_a = tag_value(a, "i")
+    if osm_a and osm_a == tag_value(b, "i"):
+        return True
+    (lat1, lon1), (lat2, lon2) = (
+        map(float, (tag_value(p, "geo") or "0,0").split(",")[:2]) for p in (a, b)
+    )
+    r = math.radians
+    h = (
+        math.sin(r(lat2 - lat1) / 2) ** 2
+        + math.cos(r(lat1)) * math.cos(r(lat2)) * math.sin(r(lon2 - lon1) / 2) ** 2
+    )
+    return 2 * 6371008.8 * math.asin(math.sqrt(h)) <= DUPLICATE_DISTANCE_M
+
+
+def merge_places(base: dict[str, Any], other: dict[str, Any]) -> dict[str, Any]:
+    """`base` with what `other` adds (as the app's mergePlaces): its labels, a
+    comment that differs, and any tag `base` lacks. Name and position stay."""
+    labels: list[str] = []
+    for label in [t[1] for t in base["tags"] + other["tags"] if t[0] == "t"]:
+        if label.casefold() not in {l.casefold() for l in labels}:
+            labels.append(label)
+    tags = [t for t in base["tags"] if t[0] != "t"] + [["t", l] for l in labels]
+
+    def has(t: list[str]) -> bool:
+        if t[0] == "l":
+            return any(x[0] == "l" and x[2:3] == t[2:3] for x in tags)
+        if t[0] == "L":
+            return any(x[0] == "L" and x[1] == t[1] for x in tags)
+        if t[0] == "image":
+            return t in tags
+        return any(x[0] == t[0] for x in tags)
+
+    base_linked = any(t[0] == "i" for t in base["tags"])
+    for t in other["tags"]:
+        if t[0] in ("t", "g"):
+            continue
+        if t[0] in ("i", "k"):
+            if not base_linked:
+                tags.append(t)
+            continue
+        if not has(t):
+            tags.append(t)
+    a, b = base["content"].strip(), other["content"].strip()
+    content = base["content"] if not b or b in a else b if not a else f"{a}\n\n{b}"
+    return {"kind": base["kind"], "tags": tags, "content": content}
