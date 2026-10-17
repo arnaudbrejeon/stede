@@ -80,6 +80,12 @@ The first build compiles strfry from source (a few minutes). Events live in the
 `relay-db` Docker volume. The policy is read by strfry at startup, so restart
 the relay after editing `relay/authors.txt`.
 
+## Deploying
+
+The app is served by Cloudflare at `https://stede.cc`; the relay
+(`wss://relay.stede.cc`) and the API run on a Google Cloud VM behind a
+Cloudflare Tunnel. Setup and releases: [docs/deploy.md](docs/deploy.md).
+
 ## Importing your Mapstr places
 
 Your key drawer (the padlock) has Export, Import and Delete all. The file they

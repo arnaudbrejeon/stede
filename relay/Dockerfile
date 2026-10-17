@@ -26,6 +26,10 @@ USER strfry
 
 COPY --from=build --chown=strfry:strfry /build/strfry /app/strfry
 COPY --chown=strfry:strfry strfry.conf /app/strfry.conf
+# Behind a proxy (production: Cloudflare), the header holding the client's
+# address, so strfry logs and limits real clients rather than the proxy.
+ARG REAL_IP_HEADER=""
+RUN sed -i "s/^\( *realIpHeader = \)\"\"/\1\"${REAL_IP_HEADER}\"/" /app/strfry.conf
 COPY --chown=strfry:strfry --chmod=755 policy.py /app/policy.py
 
 VOLUME /app/strfry-db

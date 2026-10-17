@@ -1,0 +1,43 @@
+# stede in production: the relay and the API on one VM, reached through a
+# Cloudflare Tunnel (no open ports). See docs/deploy.md.
+#   wss://relay.stede.cc -> relay:7777
+#   https://api.stede.cc -> backend:8000 (the app calls it as stede.cc/api)
+name: stede
+
+services:
+  relay:
+    build:
+      context: ../relay
+      args:
+        REAL_IP_HEADER: cf-connecting-ip
+    volumes:
+      - relay-db:/app/strfry-db
+      - ../relay/authors.txt:/app/authors.txt:ro
+    environment:
+      # Only the pubkeys in relay/authors.txt may write.
+      STEDE_RELAY_OPEN_WRITES: "0"
+    restart: unless-stopped
+
+  backend:
+    build: ../backend
+    restart: unless-stopped
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --config
+      - /etc/cloudflared/config.yml
+      - run
+      - ${STEDE_TUNNEL_ID:?set STEDE_TUNNEL_ID in deploy/.env}
+    volumes:
+      - ./cloudflared.yml:/etc/cloudflared/config.yml:ro
+      - ./tunnel.json:/etc/cloudflared/tunnel.json:ro
+    depends_on:
+      - relay
+      - backend
+    restart: unless-stopped
+
+volumes:
+  relay-db:

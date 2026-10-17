@@ -1,2 +1,6 @@
 # Pubkeys (64-char hex, one per line) allowed to write to the stede relay.
 # Lines starting with # are ignored. The relay reads this file at startup.
+# npub1qv9qr6h90wgg3cx0jer90ywjwtyldxc8mk6glpmspxsp89g2tw8sklv3z0
+030a01eae57b9088e0cf96465791d272c9f69b07ddb48f877009a013950a5b8f
+# npub1hlsddurdr79l7j0x5jl949qx2kmascaumygfq3900ugrxpy3u4usrwq8l9
+bfe0d6f06d1f8bff49e6a4be5a940655b7d863bcd9109044af7f10330491e579

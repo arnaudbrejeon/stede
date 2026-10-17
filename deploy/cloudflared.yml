@@ -1,0 +1,8 @@
+# Which hostname goes where, for the tunnel in deploy/compose.yml.
+credentials-file: /etc/cloudflared/tunnel.json
+ingress:
+  - hostname: relay.stede.cc
+    service: http://relay:7777
+  - hostname: api.stede.cc
+    service: http://backend:8000
+  - service: http_status:404

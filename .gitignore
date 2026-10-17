@@ -20,3 +20,6 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+
+# Deployment secrets (docs/deploy.md)
+deploy/tunnel.json
