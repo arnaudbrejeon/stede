@@ -1229,3 +1229,32 @@ body,
   margin-left: -18px;
   color: var(--rubric);
 }
+.key-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.key-divider::before,
+.key-divider::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--line);
+}
+.import-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  padding: 12px;
+  font-size: 14px;
+  background: var(--action-panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.import-confirm p {
+  margin: 0;
+}

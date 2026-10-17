@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { getPublicKey } from 'nostr-tools'
 import * as nip19 from 'nostr-tools/nip19'
 import * as nip49 from 'nostr-tools/nip49'
+import { asNostr, findExtension, localNostr, type Nostr } from './signer'
 
 // The user's Nostr key, kept in this browser.
 //
@@ -15,12 +16,16 @@ import * as nip49 from 'nostr-tools/nip49'
 //
 // localStorage is only readable by this origin, but anything running on it
 // can read the unlocked key, so the app must not load untrusted scripts.
+//
+// Or the key stays in a NIP-07 browser extension (nos2x, Alby…): the app only
+// remembers which public key it used, and asks the extension each time.
 
 // scrypt cost of the NIP-49 encryption: 2^17 rounds, 128 MiB, a fraction of a
 // second on a laptop and still bearable on a phone, once per browser session.
 const SCRYPT_LOG_N = 17
 
 const STORED = 'stede.key' // localStorage: {pubkey, ncryptsec}
+const EXTENSION = 'stede.extension' // localStorage: the extension's pubkey
 const SESSION = 'stede.session' // sessionStorage: the key wrapped with the session key
 const DB_NAME = 'stede-keystore'
 const DB_STORE = 'keys'
@@ -30,13 +35,18 @@ const CHANNEL = 'stede-keystore'
 const SHARE_TIMEOUT_MS = 300
 
 export type KeyStatus = 'loading' | 'none' | 'locked' | 'unlocked'
-export type KeyState = { status: KeyStatus; pubkey: string | null }
+// Where the key is: in this browser, encrypted with a password, or in an extension.
+export type KeyKind = 'local' | 'extension'
+export type KeyState = { status: KeyStatus; pubkey: string | null; kind: KeyKind | null }
+
+const NO_KEY: KeyState = { status: 'none', pubkey: null, kind: null }
 
 type Stored = { pubkey: string; ncryptsec: string }
 type Message = { type: 'request' } | { type: 'share'; wrapped: string } | { type: 'lock' }
 
-let state: KeyState = { status: 'loading', pubkey: null }
+let state: KeyState = { status: 'loading', pubkey: null, kind: null }
 let secretKey: Uint8Array | null = null
+let nostr: Nostr | null = null
 // This tab's wrapped copy, shared with tabs opened later.
 let wrappedKey: string | null = null
 const listeners = new Set<() => void>()
@@ -60,16 +70,23 @@ export function useKey(): KeyState {
   return useSyncExternalStore(subscribeKey, getKeyState)
 }
 
-// The unlocked secret key, for signing and encryption; null when locked.
-export function getSecretKey(): Uint8Array | null {
-  return secretKey
+// Your key behind the NIP-07 extension API, wherever it is: the extension
+// itself, or the key kept here wrapped in the same API. Null when locked.
+export function getNostr(): Nostr | null {
+  return nostr
 }
 
-// Reads the stored key and resumes this browser session's unlock if there is one.
+// Reads the stored key and resumes this browser session's unlock if there is
+// one, or reconnects to the extension used last time.
 export async function initKey(): Promise<KeyState> {
+  const extensionPubkey = readExtension()
+  if (extensionPubkey) {
+    await reconnectExtension(extensionPubkey)
+    return state
+  }
   const stored = readStored()
   if (!stored) {
-    setState({ status: 'none', pubkey: null })
+    setState(NO_KEY)
     return state
   }
   const wrapped = sessionStorage.getItem(SESSION) ?? (await askOtherTabs())
@@ -77,13 +94,58 @@ export async function initKey(): Promise<KeyState> {
   if (key && getPublicKey(key) === stored.pubkey) {
     sessionStorage.setItem(SESSION, wrapped!)
     secretKey = key
+    nostr = localNostr(key)
     wrappedKey = wrapped
-    setState({ status: 'unlocked', pubkey: stored.pubkey })
+    setState({ status: 'unlocked', pubkey: stored.pubkey, kind: 'local' })
   } else {
     sessionStorage.removeItem(SESSION)
-    setState({ status: 'locked', pubkey: stored.pubkey })
+    setState({ status: 'locked', pubkey: stored.pubkey, kind: 'local' })
   }
   return state
+}
+
+// Uses a NIP-07 extension's key instead of one kept here.
+export async function connectExtension(): Promise<void> {
+  const extension = await findExtension(0)
+  if (!extension) throw new Error('No Nostr extension found in this browser.')
+  const usable = asNostr(extension)
+  const pubkey = await usable.getPublicKey()
+  nostr = usable
+  localStorage.setItem(EXTENSION, pubkey)
+  setState({ status: 'unlocked', pubkey, kind: 'extension' })
+}
+
+// Stops using the extension; a key kept here (if any) is offered again.
+export function disconnectExtension(): void {
+  localStorage.removeItem(EXTENSION)
+  nostr = null
+  const stored = readStored()
+  setState(stored ? { status: 'locked', pubkey: stored.pubkey, kind: 'local' } : NO_KEY)
+}
+
+async function reconnectExtension(pubkey: string) {
+  const extension = await findExtension()
+  try {
+    if (!extension) throw new Error('No Nostr extension found')
+    const usable = asNostr(extension)
+    // The extension may have switched accounts since: use the one it has now.
+    const current = await usable.getPublicKey()
+    nostr = usable
+    localStorage.setItem(EXTENSION, current)
+    setState({ status: 'unlocked', pubkey: current, kind: 'extension' })
+  } catch (error) {
+    console.warn('Nostr extension unavailable', error)
+    nostr = null
+    setState({ status: 'locked', pubkey, kind: 'extension' })
+  }
+}
+
+function readExtension(): string | null {
+  try {
+    return localStorage.getItem(EXTENSION)
+  } catch {
+    return null
+  }
 }
 
 // Stores the user's own key (nsec, or 64 hex characters) encrypted with a new password.
@@ -122,7 +184,7 @@ export async function lock(): Promise<void> {
 export async function forgetKey(): Promise<void> {
   await lock()
   localStorage.removeItem(STORED)
-  setState({ status: 'none', pubkey: null })
+  setState(NO_KEY)
 }
 
 export function parseSecretKey(value: string): Uint8Array {
@@ -145,9 +207,7 @@ export function checkPassword(password: string): void {
 function readStored(): Stored | null {
   try {
     const value = JSON.parse(localStorage.getItem(STORED) ?? 'null')
-    return typeof value?.pubkey === 'string' && typeof value?.ncryptsec === 'string'
-      ? value
-      : null
+    return typeof value?.pubkey === 'string' && typeof value?.ncryptsec === 'string' ? value : null
   } catch {
     return null
   }
@@ -158,16 +218,20 @@ async function startSession(key: Uint8Array, pubkey: string) {
   wrappedKey = await wrap(key, sessionKey)
   sessionStorage.setItem(SESSION, wrappedKey)
   secretKey = key
-  setState({ status: 'unlocked', pubkey })
+  nostr = localNostr(key)
+  setState({ status: 'unlocked', pubkey, kind: 'local' })
 }
 
 function dropSession() {
   sessionStorage.removeItem(SESSION)
+  // The extension isn't locked by this; only a key kept here is.
+  if (state.kind === 'extension') return
   secretKey?.fill(0)
   secretKey = null
+  nostr = null
   wrappedKey = null
   const stored = readStored()
-  setState(stored ? { status: 'locked', pubkey: stored.pubkey } : { status: 'none', pubkey: null })
+  setState(stored ? { status: 'locked', pubkey: stored.pubkey, kind: 'local' } : NO_KEY)
 }
 
 channel?.addEventListener('message', (event: MessageEvent<Message>) => {

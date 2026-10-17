@@ -1,10 +1,9 @@
 import { useSyncExternalStore } from 'react'
-import { getPublicKey, type NostrEvent } from 'nostr-tools'
+import type { NostrEvent } from 'nostr-tools'
 import { AbstractSimplePool } from 'nostr-tools/abstract-pool'
 import { SimplePool } from 'nostr-tools/pool'
-import { getKeyState, getSecretKey, subscribeKey } from './keystore'
+import { getKeyState, getNostr, subscribeKey } from './keystore'
 import {
-  conversationKey,
   deletionEvent,
   innerPlace,
   keepUnmanagedTags,
@@ -16,6 +15,7 @@ import {
   type PlaceDraft,
 } from './placeEvents'
 import { NO_PLACES, type Place, type Places } from './places'
+import type { Nostr } from './signer'
 import {
   buildPlacesFile,
   parsePlacesFile,
@@ -48,11 +48,19 @@ export type PlacesState = {
   status: PlacesStatus
   places: Places
   error: string | null
-  // Events read so far while loading.
+  // While loading: events read from the relay, then how many of them are
+  // decrypted (slow with an extension, which decrypts one at a time).
   loaded: number
+  opened: number
 }
 
-let state: PlacesState = { status: 'idle', places: NO_PLACES, error: null, loaded: 0 }
+let state: PlacesState = {
+  status: 'idle',
+  places: NO_PLACES,
+  error: null,
+  loaded: 0,
+  opened: 0,
+}
 const listeners = new Set<() => void>()
 const pool = new SimplePool()
 // Reads your private places without checking signatures, which would take
@@ -109,22 +117,27 @@ function onKeyChange() {
   if (pubkey) void loadPlaces()
   else {
     records.clear()
-    setState({ status: 'idle', places: NO_PLACES, error: null, loaded: 0 })
+    setState({ status: 'idle', places: NO_PLACES, error: null, loaded: 0, opened: 0 })
   }
 }
 subscribeKey(onKeyChange)
 onKeyChange()
 
 export async function loadPlaces(): Promise<void> {
-  const secretKey = requireKey()
+  const { nostr, pubkey } = requireKey()
   const run = ++generation
-  setState({ status: 'loading', error: null, loaded: 0 })
+  setState({ status: 'loading', error: null, loaded: 0, opened: 0 })
   try {
-    const events = await fetchAll(getPublicKey(secretKey), (loaded) => {
+    const events = await fetchAll(pubkey, (loaded) => {
       if (run === generation) setState({ loaded })
     })
     if (run !== generation) return
-    readEvents(events, conversationKey(secretKey))
+    const opened = await openEvents(events, nostr, (count) => {
+      if (run === generation) setState({ opened: count })
+    })
+    if (run !== generation) return
+    records.clear()
+    for (const [inner, createdAt] of opened) keep(inner, createdAt)
     setState({ status: 'ready' })
     showRecords()
   } catch (error) {
@@ -137,13 +150,13 @@ export async function loadPlaces(): Promise<void> {
 // Saves a new place (no id) or a new version of one; returns the saved place.
 // Tags the app doesn't manage (another app's labels…) are kept.
 export async function savePlace(draft: PlaceDraft): Promise<Place> {
-  const secretKey = requireKey()
+  const { nostr, pubkey } = requireKey()
   const id = draft.id ?? crypto.randomUUID()
   const previous = records.get(id)
   const inner = keepUnmanagedTags(innerPlace({ ...draft, id }), previous?.inner)
   if (!placeFromInner(inner)) throw new Error('This place is missing its name or position.')
   const createdAt = Math.max(nowSeconds(), (previous?.createdAt ?? 0) + 1, lastDeletion + 1)
-  await publish(sealPlace(inner, secretKey, createdAt))
+  await publish(await sealPlace(inner, nostr, pubkey, createdAt))
   const place = keep(inner, createdAt)!
   showRecords()
   return place
@@ -163,14 +176,14 @@ export async function deleteAllPlaces(onProgress?: (done: number, total: number)
 }
 
 async function deleteIds(ids: string[], onProgress?: (done: number, total: number) => void) {
-  const secretKey = requireKey()
+  const { nostr, pubkey } = requireKey()
   // Dated after every version it deletes, or the newer ones would survive it.
   const latest = Math.max(0, ...ids.map((id) => records.get(id)?.createdAt ?? 0))
   const createdAt = Math.max(nowSeconds(), latest, lastDeletion)
   const batches = chunks(ids, DELETE_BATCH)
   let done = 0
   await runAll(batches, undefined, async (batch) => {
-    await publish(deletionEvent(batch, secretKey, createdAt))
+    await publish(await deletionEvent(batch, nostr, pubkey, createdAt))
     for (const id of batch) records.delete(id)
     done += batch.length
     onProgress?.(done, ids.length)
@@ -204,10 +217,27 @@ export async function importPlaces(
   text: string,
   onProgress?: (done: number, total: number) => void,
   signal?: AbortSignal,
+  // Told how many places will be written before any is; false stops the import.
+  beforeWrite?: (count: number) => Promise<boolean>,
 ): Promise<ImportResult> {
-  const secretKey = requireKey()
+  const { nostr, pubkey } = requireKey()
   const { places, invalid } = parsePlacesFile(text)
   const plan = planImport(records, places)
+  if (plan.writes.length > 0 && beforeWrite && !(await beforeWrite(plan.writes.length))) {
+    const { added, updated, merged, unchanged } = plan
+    const total = plan.writes.length
+    return {
+      added,
+      updated,
+      merged,
+      unchanged,
+      invalid,
+      failed: 0,
+      cancelled: true,
+      saved: 0,
+      total,
+    }
+  }
   // Dated forward from now (after any deletion), a few hundred per second. The
   // relay accepts events up to 15 minutes ahead: room for 360,000 places.
   let slot = Math.max(nowSeconds(), lastDeletion + 1) * PER_SECOND
@@ -225,7 +255,7 @@ export async function importPlaces(
   await runAll(dated, signal, async ({ inner, createdAt }) => {
     let event = inner
     try {
-      await publish(sealPlace(inner, secretKey, createdAt))
+      await publish(await sealPlace(inner, nostr, pubkey, createdAt))
     } catch (error) {
       // A place deleted from this relay can't come back under its address.
       if (!String(error).includes('deleted')) {
@@ -234,7 +264,7 @@ export async function importPlaces(
       }
       event = withNewId(inner)
       try {
-        await publish(sealPlace(event, secretKey, createdAt))
+        await publish(await sealPlace(event, nostr, pubkey, createdAt))
       } catch {
         failed++
         return
@@ -266,10 +296,12 @@ function withNewId(inner: InnerPlace): InnerPlace {
   return { ...inner, tags: inner.tags.map((t) => (t[0] === 'd' ? ['d', id] : t)) }
 }
 
-function requireKey(): Uint8Array {
-  const secretKey = getSecretKey()
-  if (!secretKey) throw new Error('Unlock your key first.')
-  return secretKey
+// Your key (see getNostr) and its public key.
+function requireKey(): { nostr: Nostr; pubkey: string } {
+  const nostr = getNostr()
+  const { pubkey } = getKeyState()
+  if (!nostr || !pubkey) throw new Error('Unlock your key first.')
+  return { nostr, pubkey }
 }
 
 async function publish(event: NostrEvent): Promise<void> {
@@ -326,8 +358,13 @@ async function fetchAll(pubkey: string, onPage?: (loaded: number) => void): Prom
   return [...byId.values()]
 }
 
-// Keeps the newest version of each place; events that don't decrypt are skipped.
-function readEvents(events: NostrEvent[], key: Uint8Array) {
+// The newest version of each place, decrypted, with its date; events that
+// don't decrypt or aren't valid places are skipped.
+async function openEvents(
+  events: NostrEvent[],
+  nostr: Nostr,
+  onProgress: (opened: number) => void,
+): Promise<[InnerPlace, number][]> {
   const newest = new Map<string, NostrEvent>()
   for (const event of events) {
     const d = event.tags.find((t) => t[0] === 'd')?.[1]
@@ -335,13 +372,17 @@ function readEvents(events: NostrEvent[], key: Uint8Array) {
     const seen = newest.get(d)
     if (!seen || event.created_at > seen.created_at) newest.set(d, event)
   }
-  records.clear()
-  for (const event of newest.values()) {
+  const opened: [InnerPlace, number][] = []
+  let done = 0
+  await runAll([...newest.values()], undefined, async (event) => {
     try {
-      if (!keep(openPlace(event, key), event.created_at))
-        console.warn('Skipping an invalid place', event.id)
+      const inner = await openPlace(event, nostr)
+      if (placeFromInner(inner)) opened.push([inner, event.created_at])
+      else console.warn('Skipping an invalid place', event.id)
     } catch (error) {
       console.warn('Skipping a place that does not decrypt', event.id, error)
     }
-  }
+    if (++done % 50 === 0 || done === newest.size) onProgress(done)
+  })
+  return opened
 }

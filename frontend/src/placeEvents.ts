@@ -1,6 +1,7 @@
-import { finalizeEvent, getPublicKey, nip44, type NostrEvent } from 'nostr-tools'
+import type { NostrEvent } from 'nostr-tools'
 import type { PlaceIconKey } from './placeIcons'
 import type { Place } from './places'
+import type { Nostr } from './signer'
 import { uniqueLabels } from './tags'
 
 // Places as Nostr events: NIP-XX Places (https://github.com/nostr-protocol/nips/issues/2492).
@@ -174,28 +175,27 @@ export function draftFromPlace(place: Place): PlaceDraft & { id: string } {
   }
 }
 
-export function conversationKey(secretKey: Uint8Array): Uint8Array {
-  return nip44.v2.utils.getConversationKey(secretKey, getPublicKey(secretKey))
-}
-
 // Encrypts a place to its author and signs the private place event.
-export function sealPlace(inner: InnerPlace, secretKey: Uint8Array, createdAt = now()): NostrEvent {
+export async function sealPlace(
+  inner: InnerPlace,
+  nostr: Nostr,
+  pubkey: string,
+  createdAt = now(),
+): Promise<NostrEvent> {
   const d = inner.tags.find((t) => t[0] === 'd')![1]
-  return finalizeEvent(
-    {
-      kind: PRIVATE_PLACE_KIND,
-      created_at: createdAt,
-      tags: [['d', d]],
-      content: nip44.v2.encrypt(JSON.stringify(inner), conversationKey(secretKey)),
-    },
-    secretKey,
-  )
+  return nostr.signEvent({
+    kind: PRIVATE_PLACE_KIND,
+    created_at: createdAt,
+    tags: [['d', d]],
+    content: await nostr.nip44.encrypt(pubkey, JSON.stringify(inner)),
+  })
 }
 
-// Decrypts a private place event; throws when it isn't one of ours.
-export function openPlace(event: NostrEvent, key: Uint8Array): InnerPlace {
+// Decrypts a private place event (encrypted by its author to themselves);
+// throws when it isn't one of ours.
+export async function openPlace(event: NostrEvent, nostr: Nostr): Promise<InnerPlace> {
   if (event.kind !== PRIVATE_PLACE_KIND) throw new Error(`Not a private place: kind ${event.kind}`)
-  const inner = JSON.parse(nip44.v2.decrypt(event.content, key)) as InnerPlace
+  const inner = JSON.parse(await nostr.nip44.decrypt(event.pubkey, event.content)) as InnerPlace
   const outerD = event.tags.find((t) => t[0] === 'd')?.[1]
   const innerD = inner.tags?.find((t) => t[0] === 'd')?.[1]
   if (!outerD || outerD !== innerD) throw new Error('The place inside does not match its event')
@@ -207,25 +207,22 @@ export function openPlace(event: NostrEvent, key: Uint8Array): InnerPlace {
 // versions of those places dated up to it.
 export function deletionEvent(
   ids: string | readonly string[],
-  secretKey: Uint8Array,
+  nostr: Nostr,
+  pubkey: string,
   createdAt = now(),
-): NostrEvent {
-  const pubkey = getPublicKey(secretKey)
-  return finalizeEvent(
-    {
-      kind: DELETION_KIND,
-      created_at: createdAt,
-      tags: [
-        ...(typeof ids === 'string' ? [ids] : ids).map((id) => [
-          'a',
-          `${PRIVATE_PLACE_KIND}:${pubkey}:${id}`,
-        ]),
-        ['k', String(PRIVATE_PLACE_KIND)],
-      ],
-      content: '',
-    },
-    secretKey,
-  )
+): Promise<NostrEvent> {
+  return nostr.signEvent({
+    kind: DELETION_KIND,
+    created_at: createdAt,
+    tags: [
+      ...(typeof ids === 'string' ? [ids] : ids).map((id) => [
+        'a',
+        `${PRIVATE_PLACE_KIND}:${pubkey}:${id}`,
+      ]),
+      ['k', String(PRIVATE_PLACE_KIND)],
+    ],
+    content: '',
+  })
 }
 
 // [lng, lat] of an RFC 5870 geo path ("48.86004,2.32663", optionally "geo:" and ";params").

@@ -1,7 +1,7 @@
 import { generateSecretKey, getPublicKey, verifyEvent } from 'nostr-tools'
 import { describe, expect, it } from 'vitest'
+import { localNostr } from './signer'
 import {
-  conversationKey,
   deletionEvent,
   draftFromPlace,
   geohash,
@@ -14,7 +14,8 @@ import {
 } from './placeEvents'
 
 const sk = generateSecretKey()
-const key = conversationKey(sk)
+const nostr = localNostr(sk)
+const pubkey = getPublicKey(sk)
 
 const orsay: PlaceDraft & { id: string } = {
   id: 'a3f9c2e1-7b4d-4c8a-9e2f-1d6b8a0c5e7f',
@@ -71,9 +72,7 @@ describe('place events', () => {
       icon: 'museum',
     })
     // Saving it again keeps everything.
-    expect(innerPlace(draftFromPlace(place))).toEqual(
-      innerPlace(orsay),
-    )
+    expect(innerPlace(draftFromPlace(place))).toEqual(innerPlace(orsay))
   })
 
   it('keeps a dropped pin minimal', () => {
@@ -101,25 +100,25 @@ describe('place events', () => {
     expect(placeFromInner({ kind: 1, content: '', tags })).toBeNull()
   })
 
-  it('seals a place so only the author can read it', () => {
-    const event = sealPlace(innerPlace(orsay), sk)
+  it('seals a place so only the author can read it', async () => {
+    const event = await sealPlace(innerPlace(orsay), nostr, pubkey)
     expect(verifyEvent(event)).toBe(true)
     expect(event.kind).toBe(31301)
     expect(event.pubkey).toBe(getPublicKey(sk))
     expect(event.tags).toEqual([['d', orsay.id]])
     expect(JSON.stringify(event)).not.toContain('Orsay')
-    expect(openPlace(event, key)).toEqual(innerPlace(orsay))
-    expect(() => openPlace(event, conversationKey(generateSecretKey()))).toThrow()
+    expect(await openPlace(event, nostr)).toEqual(innerPlace(orsay))
+    await expect(openPlace(event, localNostr(generateSecretKey()))).rejects.toThrow()
   })
 
-  it('refuses an event whose d differs from the place inside', () => {
-    const event = sealPlace(innerPlace(orsay), sk)
+  it('refuses an event whose d differs from the place inside', async () => {
+    const event = await sealPlace(innerPlace(orsay), nostr, pubkey)
     const forged = { ...event, tags: [['d', 'other']] }
-    expect(() => openPlace(forged, key)).toThrow(/does not match/)
+    await expect(openPlace(forged, nostr)).rejects.toThrow(/does not match/)
   })
 
-  it('deletes by address', () => {
-    const event = deletionEvent(orsay.id, sk)
+  it('deletes by address', async () => {
+    const event = await deletionEvent(orsay.id, nostr, pubkey)
     expect(verifyEvent(event)).toBe(true)
     expect(event.kind).toBe(5)
     expect(event.tags).toEqual([

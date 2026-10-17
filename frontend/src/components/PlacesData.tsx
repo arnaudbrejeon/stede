@@ -6,17 +6,27 @@ import {
   usePlaces,
   type ImportResult,
 } from '../placeStore'
+import { useKey } from '../keystore'
+
+// Through an extension, imports of more places than this ask first.
+const EXTENSION_CONFIRM_ABOVE = 5
 
 type Job = { label: string; done: number; total: number }
 
 // Export, import and delete-all of your places (see placesFile.ts).
 export function PlacesData() {
-  const { status, places, loaded } = usePlaces()
+  const { status, places, loaded, opened } = usePlaces()
   const count = places.features.length
   const [job, setJob] = useState<Job | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const { kind } = useKey()
+  // An import waiting for the go-ahead, with how many places it will write.
+  const [confirming, setConfirming] = useState<{
+    count: number
+    answer: (go: boolean) => void
+  } | null>(null)
   // Set while an import runs, to cancel it.
   const [abort, setAbort] = useState<AbortController | null>(null)
   const busy = job !== null || status !== 'ready'
@@ -57,7 +67,23 @@ export function PlacesData() {
     setAbort(controller)
     return run('Importing', async (progress) => {
       try {
-        return summary(await importPlaces(await file.text(), progress, controller.signal))
+        // An extension may ask before each place: say how many first, so it can
+        // be set to allow stede for the import.
+        const beforeWrite = (count: number) =>
+          kind === 'extension' && count > EXTENSION_CONFIRM_ABOVE
+            ? new Promise<boolean>((resolve) =>
+                setConfirming({
+                  count,
+                  answer: (go) => {
+                    setConfirming(null)
+                    resolve(go)
+                  },
+                }),
+              )
+            : Promise.resolve(true)
+        return summary(
+          await importPlaces(await file.text(), progress, controller.signal, beforeWrite),
+        )
       } finally {
         setAbort(null)
       }
@@ -77,7 +103,9 @@ export function PlacesData() {
       <h3>Your places</h3>
       <p className="key-note">
         {status === 'loading'
-          ? `Loading… ${plural(loaded, 'place')}`
+          ? opened > 0
+            ? `Decrypting… ${opened.toLocaleString()} / ${plural(loaded, 'place')}`
+            : `Loading… ${plural(loaded, 'place')}`
           : `${plural(count, 'place')} on the relay.`}{' '}
         The export file holds them unencrypted: keep it somewhere safe.
       </p>
@@ -110,7 +138,24 @@ export function PlacesData() {
           }}
         />
       </div>
-      {job && (
+      {confirming && (
+        <div className="import-confirm" role="alertdialog" aria-label="Before importing">
+          <p>
+            This import will ask your Nostr extension to encrypt and sign{' '}
+            {plural(confirming.count, 'place')}. If it asks you each time, set it to allow this site
+            now, then continue.
+          </p>
+          <div className="places-data-buttons">
+            <button type="button" className="key-button" onClick={() => confirming.answer(true)}>
+              Continue
+            </button>
+            <button type="button" className="link-button" onClick={() => confirming.answer(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {job && !confirming && (
         <div className="progress" role="status">
           <progress
             value={job.total ? job.done : undefined}
@@ -156,6 +201,7 @@ export function PlacesData() {
 }
 
 function summary(r: ImportResult): string {
+  if (r.cancelled && r.saved === 0) return 'Import cancelled: nothing was saved.'
   if (r.cancelled)
     return (
       `Import cancelled: ${r.saved.toLocaleString()} of ${plural(r.total, 'place')} saved. ` +

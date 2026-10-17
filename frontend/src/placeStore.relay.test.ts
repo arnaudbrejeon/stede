@@ -150,4 +150,31 @@ describe.skipIf(!HOST)('places on the relay', () => {
     expect(store.getPlacesState().places.features).toHaveLength(200)
     await store.deleteAllPlaces()
   }, 60000)
+
+  it('asks before writing, and writes nothing when told no', async () => {
+    const keystore = await import('./keystore')
+    const store = await import('./placeStore')
+    const { innerPlace } = await import('./placeEvents')
+    await keystore.importKey(nip19.nsecEncode(generateSecretKey()), 'pw')
+    await vi.waitFor(() => expect(store.getPlacesState().status).toBe('ready'))
+    const places = Array.from({ length: 8 }, (_, i) => ({
+      ...innerPlace({ id: `q${i}`, name: `Ask ${i}`, lngLat: [3 + i / 100, 47] }),
+      created_at: 1,
+    }))
+    const file = JSON.stringify({ format: 'stede-places', version: 1, exported_at: 1, places })
+    const asked: number[] = []
+
+    const declined = await store.importPlaces(file, undefined, undefined, async (count) => {
+      asked.push(count)
+      return false
+    })
+    expect(asked).toEqual([8])
+    expect(declined).toMatchObject({ cancelled: true, saved: 0, total: 8 })
+    await store.loadPlaces()
+    expect(store.getPlacesState().places.features).toHaveLength(0)
+
+    const accepted = await store.importPlaces(file, undefined, undefined, async () => true)
+    expect(accepted).toMatchObject({ cancelled: false, saved: 8 })
+    await store.deleteAllPlaces()
+  }, 60000)
 })

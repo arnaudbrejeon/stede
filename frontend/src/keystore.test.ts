@@ -49,15 +49,15 @@ beforeEach(async () => {
 describe('keystore', () => {
   it('starts with no key', async () => {
     const { keystore } = await openTab()
-    expect(await keystore.initKey()).toEqual({ status: 'none', pubkey: null })
+    expect(await keystore.initKey()).toEqual({ status: 'none', pubkey: null, kind: null })
   })
 
   it('stores only the encrypted key and the pubkey', async () => {
     const { keystore, storage } = await openTab()
     await keystore.initKey()
     await keystore.importKey(nsec, PASSWORD)
-    expect(keystore.getKeyState()).toEqual({ status: 'unlocked', pubkey })
-    expect(keystore.getSecretKey()).toEqual(sk)
+    expect(keystore.getKeyState()).toEqual({ status: 'unlocked', pubkey, kind: 'local' })
+    await expect(keystore.getNostr()?.getPublicKey()).resolves.toBe(pubkey)
 
     const stored = JSON.parse(localStorage.getItem('stede.key')!)
     expect(stored.pubkey).toBe(pubkey)
@@ -89,16 +89,16 @@ describe('keystore', () => {
     // Reload: same sessionStorage, fresh module.
     vi.resetModules()
     const reloaded = await import('./keystore')
-    expect(await reloaded.initKey()).toEqual({ status: 'unlocked', pubkey })
-    expect(reloaded.getSecretKey()).toEqual(sk)
+    expect(await reloaded.initKey()).toEqual({ status: 'unlocked', pubkey, kind: 'local' })
+    await expect(reloaded.getNostr()?.getPublicKey()).resolves.toBe(pubkey)
   })
 
   it('shares the unlock with a new tab', async () => {
     const first = await openTab()
     await first.keystore.importKey(nsec, PASSWORD)
     const second = await openTab()
-    expect(await second.keystore.initKey()).toEqual({ status: 'unlocked', pubkey })
-    expect(second.keystore.getSecretKey()).toEqual(sk)
+    expect(await second.keystore.initKey()).toEqual({ status: 'unlocked', pubkey, kind: 'local' })
+    await expect(second.keystore.getNostr()?.getPublicKey()).resolves.toBe(pubkey)
   })
 
   it('asks for the password in a new browser session', async () => {
@@ -106,8 +106,8 @@ describe('keystore', () => {
     await first.keystore.importKey(nsec, PASSWORD)
     await first.keystore.lock() // stands in for closing the browser: no tab left to share
     const later = await openTab()
-    expect(await later.keystore.initKey()).toEqual({ status: 'locked', pubkey })
-    expect(later.keystore.getSecretKey()).toBeNull()
+    expect(await later.keystore.initKey()).toEqual({ status: 'locked', pubkey, kind: 'local' })
+    expect(later.keystore.getNostr()).toBeNull()
   })
 
   it('unlocks with the right password only', async () => {
@@ -117,8 +117,8 @@ describe('keystore', () => {
     await expect(first.keystore.unlock('wrong password!')).rejects.toThrow('Wrong password.')
     expect(first.keystore.getKeyState().status).toBe('locked')
     await first.keystore.unlock(PASSWORD)
-    expect(first.keystore.getKeyState()).toEqual({ status: 'unlocked', pubkey })
-    expect(first.keystore.getSecretKey()).toEqual(sk)
+    expect(first.keystore.getKeyState()).toEqual({ status: 'unlocked', pubkey, kind: 'local' })
+    await expect(first.keystore.getNostr()?.getPublicKey()).resolves.toBe(pubkey)
   })
 
   it('locking one tab locks the others', async () => {
@@ -130,7 +130,7 @@ describe('keystore', () => {
     inTab(first)
     await first.keystore.lock()
     await vi.waitFor(() => expect(second.keystore.getKeyState().status).toBe('locked'))
-    expect(second.keystore.getSecretKey()).toBeNull()
+    expect(second.keystore.getNostr()).toBeNull()
 
     // The second tab's wrapped copy is useless now: its session key is gone.
     inTab(second)
@@ -143,7 +143,7 @@ describe('keystore', () => {
     const { keystore } = await openTab()
     await keystore.importKey(nsec, PASSWORD)
     await keystore.forgetKey()
-    expect(keystore.getKeyState()).toEqual({ status: 'none', pubkey: null })
+    expect(keystore.getKeyState()).toEqual({ status: 'none', pubkey: null, kind: null })
     expect(localStorage.getItem('stede.key')).toBeNull()
   })
 })
