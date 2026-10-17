@@ -1175,3 +1175,57 @@ body,
   font-size: 14px;
   color: var(--muted);
 }
+
+/* Map type switcher (mapTypeControl.ts): a list opening to the left of its button. */
+.map-type {
+  position: relative;
+}
+.maplibregl-ctrl-group .map-type-button {
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+}
+.map-type-menu {
+  position: absolute;
+  top: 0;
+  right: calc(100% + 8px);
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(var(--shadow), 0.18);
+}
+.map-type-menu[hidden] {
+  display: none;
+}
+.maplibregl-ctrl-group .map-type-menu button {
+  display: block;
+  width: 100%;
+  height: auto;
+  padding: 8px 12px 8px 28px;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  color: var(--ink);
+  background: none;
+  border: none;
+  border-radius: 6px;
+}
+.maplibregl-ctrl-group .map-type-menu button + button {
+  border-top: none;
+}
+.maplibregl-ctrl-group .map-type-menu button:hover {
+  background: var(--hover);
+}
+.maplibregl-ctrl-group .map-type-menu button[aria-checked='true'] {
+  font-weight: 600;
+}
+.maplibregl-ctrl-group .map-type-menu button[aria-checked='true']::before {
+  content: '✓';
+  position: absolute;
+  margin-left: -18px;
+  color: var(--rubric);
+}

@@ -1,11 +1,11 @@
 import * as maplibregl from 'maplibre-gl'
 import { useEffect, useImperativeHandle, useRef, type Ref, type RefObject } from 'react'
 import type { GeocodeResult, MapView } from '../geocoder'
-import { BASE_STYLE_URL, flattenStyle, tintStyle, VELLUM_MAP_COLORS } from '../mapStyle'
+import { saveMapType, savedMapType, type MapType, type PlaceInk } from '../mapStyle'
+import { MapTypeControl } from '../mapTypeControl'
 import {
   createSearchPinElement,
   drawMarker,
-  INK,
   isMarkerImageId,
   MARKER_RADIUS,
   markerImageId,
@@ -62,6 +62,8 @@ export function PlacesMap({
   // Latest props, so handlers registered once on the map never see stale values.
   const placesRef = useRef(places)
   const selectedIdRef = useRef(selectedId)
+  // The base map shown, which decides how the place layers are drawn.
+  const mapTypeRef = useRef<MapType>(savedMapType())
   const onSelectRef = useRef(onSelect)
   const tagColorsRef = useRef(tagColors)
   // View from before the drawer opened, restored when it closes. Dropped if the
@@ -134,9 +136,15 @@ export function PlacesMap({
     map.touchZoomRotate.disableRotation()
     map.keyboard.disableRotation()
     // Filtered and tinted as the style arrives, so the original is never drawn.
-    map.setStyle(BASE_STYLE_URL, {
-      transformStyle: (_previous, next) => tintStyle(flattenStyle(next), VELLUM_MAP_COLORS),
-    })
+    // A new style drops the place layers; they're added back on style.load.
+    const showMapType = (type: MapType) => {
+      mapTypeRef.current = type
+      map.setStyle(type.style, {
+        diff: false,
+        transformStyle: (_previous, next) => type.transform(next),
+      })
+    }
+    showMapType(savedMapType())
     mapRef.current = map
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
     // Shows where you are and centres the map on you; one-off, not following.
@@ -145,6 +153,13 @@ export function PlacesMap({
       fitBoundsOptions: { maxZoom: 15 },
     })
     map.addControl(geolocate, 'top-right')
+    map.addControl(
+      new MapTypeControl(savedMapType(), (type) => {
+        saveMapType(type)
+        showMapType(type)
+      }),
+      'top-right',
+    )
     // Open where you are when the browser will say (it asks the first time;
     // only over HTTPS or on localhost). Until then, and otherwise, the default view.
     let userMoved = false
@@ -174,7 +189,9 @@ export function PlacesMap({
       map.getContainer().querySelector('.maplibregl-compact-show')?.classList.remove('maplibregl-compact-show')
     })
 
-    map.on('load', () => {
+    // On the first style and again after each change of map type.
+    map.on('style.load', () => {
+      if (map.getSource(SOURCE_ID)) return
       map.addSource(SOURCE_ID, {
         type: 'geojson',
         data: toMapData(placesRef.current),
@@ -182,7 +199,7 @@ export function PlacesMap({
         clusterRadius: 45,
         clusterMaxZoom: 15,
       })
-      addLayers(map)
+      addLayers(map, mapTypeRef.current.ink)
       map.setFilter('place-selected', selectedFilter(selectedIdRef.current))
     })
 
@@ -299,7 +316,7 @@ export function PlacesMap({
   return <div ref={containerRef} className="map" />
 }
 
-function addLayers(map: maplibregl.Map) {
+function addLayers(map: maplibregl.Map, ink: PlaceInk) {
   // Clusters: dark circles sized by count
   map.addLayer({
     id: 'clusters',
@@ -333,7 +350,7 @@ function addLayers(map: maplibregl.Map) {
     source: SOURCE_ID,
     filter: selectedFilter(null),
     paint: {
-      'circle-color': INK,
+      'circle-color': ink.selected,
       'circle-radius': MARKER_RADIUS + 3,
     },
   })
@@ -364,7 +381,7 @@ function addLayers(map: maplibregl.Map) {
       'text-offset': [0, (MARKER_RADIUS + 3) / 12],
       'text-anchor': 'top',
     },
-    paint: { 'text-color': INK, 'text-halo-color': '#fffcf5', 'text-halo-width': 1.5 },
+    paint: { 'text-color': ink.label, 'text-halo-color': ink.halo, 'text-halo-width': 1.5 },
   })
 }
 
