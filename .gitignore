@@ -23,3 +23,4 @@ dist/
 
 # Deployment secrets (docs/deploy.md)
 deploy/tunnel.json
+.wrangler/

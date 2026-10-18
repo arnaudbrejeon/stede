@@ -4,31 +4,31 @@
 
 ## Layout
 
-- `backend/` — Python API (FastAPI, managed with [uv](https://docs.astral.sh/uv/))
-- `frontend/` — TypeScript web app (React + Vite)
+- `frontend/` — TypeScript web app (React + Vite), and its API in
+  `frontend/worker/` (a Cloudflare Worker: place search, addresses and photos)
+- `backend/` — Python import tools for Mapstr and Pindrop exports (managed with
+  [uv](https://docs.astral.sh/uv/))
 - `relay/` — Nostr relay ([strfry](https://github.com/hoytech/strfry)) that only stores place events
 
 ## Development
 
-Start the backend, frontend and relay at once with `./dev.sh` (add `--lan` for
-the phone setup below, or `--no-relay` to skip the relay and Docker), or
-separately:
-
-Backend (http://localhost:8000):
-
-```sh
-cd backend
-uv sync
-uv run uvicorn stede.main:app --reload
-uv run pytest
-```
-
-Frontend (http://localhost:5173, proxies `/api` to the backend):
+Start the app and relay at once with `./dev.sh` (add `--lan` for the phone
+setup below, or `--no-relay` to skip the relay and Docker), or the app alone
+(http://localhost:5173):
 
 ```sh
 cd frontend
 npm install
-npm run dev
+npm run dev     # the dev server also answers /api with frontend/worker/
+npm test
+```
+
+The import tools (see "Importing your Mapstr places"):
+
+```sh
+cd backend
+uv sync
+uv run pytest
 ```
 
 To try it on a phone on the same network, run `npm run dev:lan` instead and open
@@ -82,9 +82,8 @@ the relay after editing `relay/authors.txt`.
 
 ## Deploying
 
-The app is served by Cloudflare at `https://stede.cc`; the relay
-(`wss://relay.stede.cc`) and the API run on a Google Cloud VM behind a
-Cloudflare Tunnel. Setup and releases: [docs/deploy.md](docs/deploy.md).
+The app and its API are served by Cloudflare at `https://stede.cc`; the relay
+(`wss://relay.stede.cc`) runs on a Google Cloud VM behind a Cloudflare Tunnel. Setup and releases: [docs/deploy.md](docs/deploy.md).
 
 ## Importing your Mapstr places
 

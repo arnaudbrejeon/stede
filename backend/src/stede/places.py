@@ -1,14 +1,6 @@
-"""Your saved places, imported from a Mapstr export (GeoJSON)."""
+"""The OSM-style category of a Mapstr place (used by scripts/assign_icons.py)."""
 
-import gzip
-import json
-import os
-from functools import lru_cache
-from pathlib import Path
-from typing import Any, NamedTuple
-
-# backend/src/stede/places.py → the repository's data/ folder.
-DEFAULT_PLACES_FILE = Path(__file__).resolve().parents[3] / "data" / "mapstr.json"
+from typing import Any
 
 # Your tag → the OSM-style value it implies. Your tags say what a place is more
 # reliably than Mapstr's icon (often just "generic"), so they're tried first, in
@@ -160,8 +152,6 @@ PLACE_CATEGORIES = {
     "Royal Botanic Garden West Gate": "garden",
 }
 
-OSM_TYPES = {"node": "N", "way": "W", "relation": "R"}
-
 
 def category_for(props: dict[str, Any]) -> str:
     """The OSM-style category a Mapstr place belongs to.
@@ -181,74 +171,3 @@ def category_for(props: dict[str, Any]) -> str:
     if kind:
         return kind[1]
     return MAPSTR_CATEGORIES.get(props.get("icon") or "", "")
-
-
-def places_file() -> Path:
-    return Path(os.environ.get("STEDE_PLACES_FILE", DEFAULT_PLACES_FILE))
-
-
-def from_mapstr(export: dict[str, Any]) -> dict[str, Any]:
-    """A Mapstr export as the app's places: numbered, with tag names and a category.
-
-    The category and icon recorded by scripts/assign_icons.py (`stede`) are used
-    as they are; places without one get their category worked out here.
-    """
-    features = []
-    for number, feature in enumerate(export.get("features", []), start=1):
-        props = feature.get("properties", {})
-        recorded = props.get("stede") or {}
-        place = {
-            "id": number,
-            "name": props.get("name") or "",
-            "category": recorded.get("category", category_for(props)),
-            "tags": [tag["name"] for tag in props.get("tags") or []],
-            "website": None,
-            "address": props.get("address") or None,
-            "comment": props.get("userComment") or None,
-        }
-        if recorded.get("icon"):
-            place["icon"] = recorded["icon"]
-        # Matched by scripts/match_osm.py; typed as in search results (N/W/R).
-        osm = props.get("osm") or {}
-        if osm.get("type") in OSM_TYPES and osm.get("id"):
-            place["osm_type"] = OSM_TYPES[osm["type"]]
-            place["osm_id"] = osm["id"]
-        features.append(
-            {
-                "type": "Feature",
-                "id": number,
-                "geometry": feature["geometry"],
-                "properties": place,
-            }
-        )
-    return {"type": "FeatureCollection", "features": features}
-
-
-class ServedPlaces(NamedTuple):
-    """The places as GeoJSON, plain and gzipped."""
-
-    json: bytes
-    gzipped: bytes
-
-
-def load_places(path: Path) -> ServedPlaces:
-    """The places in `path` as GeoJSON. A missing file means no places yet.
-
-    Re-read when the file changes (the scripts in backend/scripts/ rewrite it).
-    """
-    try:
-        modified = path.stat().st_mtime_ns
-    except FileNotFoundError:
-        modified = None
-    return _serialise_places(path, modified)
-
-
-@lru_cache(maxsize=1)
-def _serialise_places(path: Path, modified: int | None) -> ServedPlaces:
-    # Serialised and compressed once per version of the file (there can be
-    # thousands of places, ~5x smaller gzipped); only the latest is kept.
-    export = (
-        json.loads(path.read_text(encoding="utf-8")) if modified is not None else {}
-    )
-    body = json.dumps(from_mapstr(export), ensure_ascii=False).encode()
-    return ServedPlaces(json=body, gzipped=gzip.compress(body, compresslevel=6))

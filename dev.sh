@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# Start the backend (uvicorn), frontend (vite) and Nostr relay (docker compose)
-# together. Ctrl-C stops them all.
+# Start the app (vite, which also runs the API in frontend/worker/) and the
+# Nostr relay (docker compose) together. Ctrl-C stops them all.
 #   --lan       serve the frontend over HTTPS on the network (phone testing)
 #   --no-relay  skip the relay (no Docker needed)
-# BACKEND_PORT=8001 ./dev.sh runs the backend on another port (default 8000).
 set -euo pipefail
 set -m  # job control: each server gets its own process group, so we can kill the whole tree
 
@@ -19,8 +18,7 @@ for arg in "$@"; do
   esac
 done
 
-backend_port=${BACKEND_PORT:-8000}
-ports=("$backend_port" 5173)
+ports=(5173)
 if $with_relay; then ports+=(7777); fi
 for port in "${ports[@]}"; do
   if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
@@ -46,10 +44,7 @@ cleanup() {
 }
 trap cleanup INT TERM EXIT
 
-(cd backend && exec uv run uvicorn stede.main:app --reload --port "$backend_port") &
-pids+=($!)
-
-(cd frontend && API_URL="http://localhost:$backend_port" exec npm run "$front_script") &
+(cd frontend && exec npm run "$front_script") &
 pids+=($!)
 
 if $with_relay; then

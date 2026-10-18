@@ -1,19 +1,14 @@
 [project]
 name = "stede"
 version = "0.1.0"
-description = "Add your description here"
+description = "Import tools for stede: Mapstr and Pindrop exports to stede places"
 authors = [
     { name = "arnaud", email = "arnaud.brejeon+github@gmail.com" }
 ]
 requires-python = ">=3.14"
 dependencies = [
-    "fastapi>=0.142.2",
     "httpx>=0.28.1",
-    "uvicorn[standard]>=0.54.0",
 ]
-
-[project.scripts]
-stede = "stede:main"
 
 [build-system]
 requires = ["uv_build>=0.12.19,<0.13.0"]

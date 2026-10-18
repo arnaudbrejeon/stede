@@ -1,7 +1,5 @@
-# stede in production: the relay and the API on one VM, reached through a
-# Cloudflare Tunnel (no open ports). See docs/deploy.md.
-#   wss://relay.stede.cc -> relay:7777
-#   https://api.stede.cc -> backend:8000 (the app calls it as stede.cc/api)
+# stede's relay in production, on a VM, reached through a Cloudflare Tunnel (no
+# open ports): wss://relay.stede.cc -> relay:7777. See docs/deploy.md.
 name: stede
 
 services:
@@ -18,10 +16,6 @@ services:
       STEDE_RELAY_OPEN_WRITES: "0"
     restart: unless-stopped
 
-  backend:
-    build: ../backend
-    restart: unless-stopped
-
   tunnel:
     image: cloudflare/cloudflared:latest
     command:
@@ -36,7 +30,6 @@ services:
       - ./tunnel.json:/etc/cloudflared/tunnel.json:ro
     depends_on:
       - relay
-      - backend
     restart: unless-stopped
 
 volumes:

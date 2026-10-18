@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Deploy stede to Google Cloud and Cloudflare (see docs/deploy.md).
 #
-#   deploy/deploy.sh create    # once: the VM and its daily disk snapshots
+#   deploy/deploy.sh create    # once: the VM
 #   deploy/deploy.sh setup     # once: Docker and swap on the VM
-#   deploy/deploy.sh backend   # the relay and the API: copy HEAD to the VM, rebuild, restart
-#   deploy/deploy.sh frontend  # the app: build and upload to Cloudflare
+#   deploy/deploy.sh relay     # the relay: copy HEAD to the VM, rebuild, restart
+#   deploy/deploy.sh app       # the app and its API: build and upload to Cloudflare
 #
 # gcloud runs with its own configuration ("stede" unless STEDE_GCLOUD_CONFIG
 # says otherwise), so the account and project active in your shell are never used.
@@ -24,11 +24,6 @@ create() {
     --machine-type e2-micro \
     --image-family debian-12 --image-project debian-cloud \
     --boot-disk-size 30GB --boot-disk-type pd-standard
-  # The relay's data is on the boot disk: keep two weeks of daily snapshots.
-  gcloud compute resource-policies create snapshot-schedule "$VM-daily" --region "$REGION" \
-    --daily-schedule --start-time 04:00 --max-retention-days 14
-  gcloud compute disks add-resource-policies "$VM" --zone "$ZONE" \
-    --resource-policies "$VM-daily"
 }
 
 setup() {
@@ -43,7 +38,7 @@ setup() {
     fi'
 }
 
-backend() {
+relay() {
   for f in deploy/.env deploy/tunnel.json; do
     [ -f "$ROOT/$f" ] || { echo "Missing $f (see docs/deploy.md)" >&2; exit 1; }
   done
@@ -63,11 +58,11 @@ backend() {
     fi'
 }
 
-frontend() {
+app() {
   (cd "$ROOT/frontend" && npm run deploy)
 }
 
 case "${1:-}" in
-  create | setup | backend | frontend) "$1" ;;
+  create | setup | relay | app) "$1" ;;
   *) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac
