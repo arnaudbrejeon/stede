@@ -2,10 +2,6 @@
 
 ## Live since 2026-10-18 (see docs/deploy.md)
 
-- **Redirect http:// to https://.** `http://stede.cc` serves the app as is,
-  where browsers withhold the crypto it needs for your key. In the Cloudflare
-  dashboard: stede.cc → SSL/TLS → Edge Certificates → Always Use HTTPS.
-
 - **Back up the relay with exports to a bucket.**
   A nightly `strfry export`, gzipped, to a Cloud Storage bucket in `stede-cc`
   (us-central1), keeping 30 days. Restores with `strfry import`, into strfry or
