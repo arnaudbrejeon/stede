@@ -14,6 +14,9 @@ services:
     environment:
       # Only the pubkeys in relay/authors.txt may write.
       STEDE_RELAY_OPEN_WRITES: "0"
+    # Open files and connections: one per client socket, plus the database.
+    ulimits:
+      nofile: 65536
     restart: unless-stopped
 
   tunnel:
