@@ -1,16 +1,10 @@
 # To do
 
-## Go live (see docs/deploy.md)
+## Live since 2026-10-18 (see docs/deploy.md)
 
-- **Finish the deployment.** The Google Cloud side is ready but the VM
-  (`stede` in project `stede-cc`) is stopped. Left to do: start it, log in to
-  Cloudflare (`cloudflared tunnel login`, `npx wrangler@4 login`), create the
-  tunnel and the `relay.stede.cc` DNS record, then `deploy/deploy.sh relay` and
-  `deploy/deploy.sh app`. The relay picks up `relay/authors.txt` (three
-  pubkeys) when it starts.
-
-- **Remove the unused API image on the VM** (`stede-backend`, built before the
-  API moved to Cloudflare): `docker image rm stede-backend` once it's running.
+- **Redirect http:// to https://.** `http://stede.cc` serves the app as is,
+  where browsers withhold the crypto it needs for your key. In the Cloudflare
+  dashboard: stede.cc → SSL/TLS → Edge Certificates → Always Use HTTPS.
 
 - **Back up the relay with exports to a bucket.**
   A nightly `strfry export`, gzipped, to a Cloud Storage bucket in `stede-cc`
