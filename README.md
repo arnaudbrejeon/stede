@@ -81,7 +81,7 @@ places; with a relay that can't, it loads everything. With `./dev.sh` running,
 `VITE_RELAY_TEST_HOST=localhost:5173 npm test` in `frontend/` also runs a test
 that saves, edits and deletes places on the relay.
 
-The first build compiles strfry from source (a few minutes). Events live in the
+The image adds our configuration to strfry's own (`relay/Dockerfile`). Events live in the
 `relay-db` Docker volume. The policy is read by strfry at startup, so restart
 the relay after editing `relay/authors.txt`.
 

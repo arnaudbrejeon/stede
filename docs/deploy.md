@@ -76,8 +76,7 @@ deploy/deploy.sh relay   # relay: HEAD copied to the VM, rebuilt, restarted
 deploy/deploy.sh app     # app and API: built with VITE_RELAY_URL=wss://relay.stede.cc, uploaded
 ```
 
-`relay` deploys the last commit, not uncommitted changes. The first build on
-the VM compiles strfry and takes a while; later ones reuse Docker's cache.
+`relay` deploys the last commit, not uncommitted changes.
 
 ## Who may write to the relay
 

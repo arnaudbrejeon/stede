@@ -30,7 +30,7 @@ setup() {
   on_vm 'set -e
     curl -fsSL https://get.docker.com | sudo sh
     sudo usermod -aG docker "$USER"
-    # 1 GB of memory is short for building strfry: add swap.
+    # 1 GB of memory is little: swap, in case.
     if [ ! -f /swapfile ]; then
       sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
       sudo mkswap /swapfile && sudo swapon /swapfile

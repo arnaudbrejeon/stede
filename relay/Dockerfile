@@ -1,30 +1,12 @@
-# strfry, built from a pinned release, with python3 for the write policy.
-# Based on strfry's own Dockerfile (https://github.com/hoytech/strfry).
-FROM alpine:3.18.3 AS build
+# strfry, from its author's image (ghcr.io/hoytech/strfry, pinned), with
+# python3 for the write policy and our configuration. Nothing is compiled, so
+# it builds in seconds, even on a small VM.
+FROM ghcr.io/hoytech/strfry@sha256:36f1886d185a88ca57c66ebe52e6e9e8428dac2486eea0a5d50ff934f18b60c3
 
-ARG STRFRY_VERSION=1.1.3
-WORKDIR /build
-
-RUN apk --no-cache add \
-    linux-headers git g++ make perl pkgconfig libtool ca-certificates \
-    libressl-dev zlib-dev lmdb-dev flatbuffers-dev libsecp256k1-dev zstd-dev
-
-RUN git clone --depth 1 --branch "${STRFRY_VERSION}" --recurse-submodules \
-    https://github.com/hoytech/strfry.git .
-
-RUN make setup-golpe && make -j4
-
-FROM alpine:3.18.3
-
-WORKDIR /app
-
-RUN apk --no-cache add lmdb flatbuffers libsecp256k1 libb2 zstd libressl python3 \
-  && rm -rf /var/cache/apk/*
-
-RUN adduser -D -h /app -s /bin/sh strfry && mkdir -p /app/strfry-db && chown -R strfry:strfry /app
+USER root
+RUN apk --no-cache add python3
 USER strfry
 
-COPY --from=build --chown=strfry:strfry /build/strfry /app/strfry
 COPY --chown=strfry:strfry strfry.conf /app/strfry.conf
 # Behind a proxy (production: Cloudflare), the header holding the client's
 # address, so strfry logs and limits real clients rather than the proxy.
