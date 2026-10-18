@@ -15,7 +15,7 @@ type Job = { label: string; done: number; total: number }
 
 // Export, import and delete-all of your places (see placesFile.ts).
 export function PlacesData() {
-  const { status, places, loaded, opened } = usePlaces()
+  const { status, places, loaded, opened, syncing } = usePlaces()
   const count = places.features.length
   const [job, setJob] = useState<Job | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -106,7 +106,9 @@ export function PlacesData() {
           ? opened > 0
             ? `Decrypting… ${opened.toLocaleString()} / ${plural(loaded, 'place')}`
             : `Loading… ${plural(loaded, 'place')}`
-          : `${plural(count, 'place')} on the relay.`}{' '}
+          : syncing
+            ? `${plural(count, 'place')} in this browser; checking the relay for changes…`
+            : `${plural(count, 'place')} on the relay.`}{' '}
         The export file holds them unencrypted: keep it somewhere safe.
       </p>
       <div className="places-data-buttons">

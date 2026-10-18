@@ -72,7 +72,12 @@ cd backend && uv run pytest ../relay/tests          # policy tests
 The app reaches the relay through the dev server at `/relay` (proxied to
 `ws://localhost:7777`, or `RELAY_URL`), so it also works over HTTPS on a phone.
 Your places are private place events (kind 31301), encrypted to your key; see
-`frontend/src/placeEvents.ts`. With `./dev.sh` running,
+`frontend/src/placeEvents.ts`. The browser keeps your places as last seen
+(`frontend/src/placeCache.ts`), encrypted under a cache key that is itself
+NIP-44 encrypted to you, so reading them takes a single decryption (one
+extension request). Each visit then asks the relay only for what changed, by
+negentropy (NIP-77, `frontend/src/negentropy.ts`), and decrypts only the new
+places; with a relay that can't, it loads everything. With `./dev.sh` running,
 `VITE_RELAY_TEST_HOST=localhost:5173 npm test` in `frontend/` also runs a test
 that saves, edits and deletes places on the relay.
 

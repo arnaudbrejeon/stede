@@ -3,6 +3,8 @@ import type { NostrEvent } from 'nostr-tools'
 import { AbstractSimplePool } from 'nostr-tools/abstract-pool'
 import { SimplePool } from 'nostr-tools/pool'
 import { getKeyState, getNostr, subscribeKey } from './keystore'
+import { reconcile } from './negentropy'
+import { clearCache, lockCache, readCache, writeCache, type CachedPlace } from './placeCache'
 import {
   deletionEvent,
   innerPlace,
@@ -27,6 +29,11 @@ import {
 // Your places, kept on the stede relay as private place events (see
 // placeEvents.ts). They load when the key is unlocked and are dropped when it
 // locks. Saving and deleting update the map at once, then publish.
+//
+// Your places are also kept in this browser, encrypted (placeCache.ts): a visit
+// shows those at once, then asks the relay only for what changed
+// (negentropy.ts), falling back to loading everything when the relay can't
+// sync that way. Only new places are decrypted one by one, shown as they come.
 
 // Served through the dev server (/relay, see vite.config.ts), so the app reaches
 // the relay on the same origin, over wss:// when the page is HTTPS.
@@ -35,6 +42,10 @@ const RELAY_URL =
   `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/relay`
 // The relay's maxFilterLimit: larger collections load in pages.
 const PAGE_SIZE = 500
+// While decrypting, the map is updated at most this often.
+const SHOW_EVERY_MS = 400
+// The cache is saved this long after the last change.
+const SAVE_CACHE_AFTER_MS = 1000
 // Imports date at most this many places per second, so a page (dated from the
 // newest back) never ends inside a second it can't get past.
 const PER_SECOND = 400
@@ -52,6 +63,8 @@ export type PlacesState = {
   // decrypted (slow with an extension, which decrypts one at a time).
   loaded: number
   opened: number
+  // Checking with the relay for changes, while showing what this browser holds.
+  syncing: boolean
 }
 
 let state: PlacesState = {
@@ -60,6 +73,7 @@ let state: PlacesState = {
   error: null,
   loaded: 0,
   opened: 0,
+  syncing: false,
 }
 const listeners = new Set<() => void>()
 const pool = new SimplePool()
@@ -72,7 +86,15 @@ const placesPool = new AbstractSimplePool({ verifyEvent: () => true, maxWaitForC
 let generation = 0
 // Each place's latest version, by d. Relays keep the newest version of a place
 // (on a tie the lower event id), so a new version is dated after the last one.
-const records = new Map<string, PlaceRecord & { place: Place }>()
+const records = new Map<string, PlaceRecord & { place: Place; eventId: string }>()
+// Your private place events, by id: what the relay holds, as far as we know.
+// `inner` is the decrypted place (null: not a valid place); until it's
+// decrypted, `event` is kept to decrypt it.
+type Known = CachedPlace | (Omit<CachedPlace, 'inner'> & { inner?: undefined; event: NostrEvent })
+const known = new Map<string, Known>()
+// Versions replaced or deleted here since the load began: a sync that started
+// before must not bring them back.
+const superseded = new Set<string>()
 // Relays refuse versions of a deleted place dated up to its deletion, so what's
 // published after a deletion is dated after it.
 let lastDeletion = 0
@@ -100,24 +122,74 @@ function showRecords() {
   setState({ places: { type: 'FeatureCollection', features } })
 }
 
-function keep(inner: InnerPlace, createdAt: number): Place | null {
+function keep(inner: InnerPlace, createdAt: number, eventId: string): Place | null {
   const place = placeFromInner(inner)
-  if (place) records.set(place.properties.id, { inner, createdAt, place })
+  if (place) records.set(place.properties.id, { inner, createdAt, place, eventId })
   return place
+}
+
+function dOf(event: NostrEvent): string {
+  return event.tags.find((t) => t[0] === 'd')?.[1] ?? ''
+}
+
+// A version just published: known, decrypted, and replacing `previous`.
+function remember(event: NostrEvent, inner: InnerPlace, previous?: string) {
+  known.set(event.id, { id: event.id, created_at: event.created_at, d: dOf(event), inner })
+  if (previous) forget([previous])
+  else saveCacheSoon()
+}
+
+function forget(eventIds: string[]) {
+  for (const id of eventIds) {
+    known.delete(id)
+    superseded.add(id)
+  }
+  saveCacheSoon()
+}
+
+// Saves the decrypted places to the cache shortly after the last change.
+let saveTimer: ReturnType<typeof setTimeout> | undefined
+function saveCacheSoon() {
+  clearTimeout(saveTimer)
+  const run = generation
+  saveTimer = setTimeout(() => {
+    const key = getKeyState()
+    const nostr = getNostr()
+    if (run !== generation || !nostr || !key.pubkey) return
+    const places = [...known.values()].filter((k): k is CachedPlace => k.inner !== undefined)
+    void writeCache(key.pubkey, nostr, places)
+  }, SAVE_CACHE_AFTER_MS)
 }
 
 // Follows the key: load on unlock, forget on lock.
 let loadedFor: string | null = null
+// Removing a key from this browser also removes its cached events.
+let keyPubkey: string | null = null
 function onKeyChange() {
   const key = getKeyState()
+  if (key.status !== 'loading' && key.pubkey !== keyPubkey) {
+    if (keyPubkey) void clearCache(keyPubkey)
+    keyPubkey = key.pubkey
+    // Deletions so far were another key's.
+    lastDeletion = 0
+  }
   const pubkey = key.status === 'unlocked' ? key.pubkey : null
   if (pubkey === loadedFor) return
   loadedFor = pubkey
   generation++
   if (pubkey) void loadPlaces()
   else {
+    lockCache()
     records.clear()
-    setState({ status: 'idle', places: NO_PLACES, error: null, loaded: 0, opened: 0 })
+    known.clear()
+    setState({
+      status: 'idle',
+      places: NO_PLACES,
+      error: null,
+      loaded: 0,
+      opened: 0,
+      syncing: false,
+    })
   }
 }
 subscribeKey(onKeyChange)
@@ -126,25 +198,141 @@ onKeyChange()
 export async function loadPlaces(): Promise<void> {
   const { nostr, pubkey } = requireKey()
   const run = ++generation
-  setState({ status: 'loading', error: null, loaded: 0, opened: 0 })
+  records.clear()
+  known.clear()
+  superseded.clear()
+  setState({ status: 'loading', error: null, loaded: 0, opened: 0, syncing: true })
   try {
-    const events = await fetchAll(pubkey, (loaded) => {
-      if (run === generation) setState({ loaded })
-    })
+    const cached = await readCache(pubkey, nostr)
     if (run !== generation) return
-    const opened = await openEvents(events, nostr, (count) => {
-      if (run === generation) setState({ opened: count })
-    })
+    for (const place of cached) known.set(place.id, place)
+    if (cached.length > 0) {
+      showKnown()
+      setState({ status: 'ready' })
+    }
+    const changed = await syncWithRelay(pubkey, run)
     if (run !== generation) return
-    records.clear()
-    for (const [inner, createdAt] of opened) keep(inner, createdAt)
-    setState({ status: 'ready' })
-    showRecords()
+    await openNew(run, nostr)
+    if (run !== generation) return
+    if (changed || cached.length === 0) showKnown()
+    setState({ status: 'ready', syncing: false })
+    if (changed || cached.length === 0) saveCacheSoon()
   } catch (error) {
     if (run !== generation) return
     console.error(error)
-    setState({ status: 'error', error: 'Your places could not be loaded from the relay.' })
+    if (state.status === 'ready') {
+      setState({
+        syncing: false,
+        error: 'The relay could not be reached: these are your places as last seen here.',
+      })
+    } else {
+      setState({
+        status: 'error',
+        syncing: false,
+        error: 'Your places could not be loaded from the relay.',
+      })
+    }
   }
+}
+
+// Shows the newest version of each place, among those decrypted.
+function showKnown() {
+  records.clear()
+  for (const entry of newestByPlace(known.values())) {
+    if (entry.inner) keep(entry.inner, entry.created_at, entry.id)
+  }
+  showRecords()
+}
+
+// Decrypts the places not decrypted yet, showing them as they come.
+async function openNew(run: number, nostr: Nostr) {
+  const newest = newestByPlace(known.values())
+  const toOpen = newest.flatMap((entry) => (entry.inner === undefined ? [entry] : []))
+  let opened = newest.length - toOpen.length
+  setState({ loaded: newest.length, opened })
+  let shownAt = performance.now()
+  await runAll(toOpen, undefined, async ({ event }) => {
+    let inner: InnerPlace | null = null
+    try {
+      inner = await openPlace(event, nostr)
+      if (!placeFromInner(inner)) {
+        console.warn('Skipping an invalid place', event.id)
+        inner = null
+      }
+    } catch (error) {
+      console.warn('Skipping a place that does not decrypt', event.id, error)
+    }
+    if (run !== generation || !known.has(event.id)) return
+    known.set(event.id, { id: event.id, created_at: event.created_at, d: dOf(event), inner })
+    opened++
+    if (performance.now() - shownAt > SHOW_EVERY_MS) {
+      shownAt = performance.now()
+      showKnown()
+      setState({ opened })
+    }
+  })
+  setState({ opened })
+}
+
+// Brings `known` in line with the relay; true when anything changed.
+async function syncWithRelay(pubkey: string, run: number): Promise<boolean> {
+  const filter = { kinds: [PRIVATE_PLACE_KIND], authors: [pubkey] }
+  let gone: string[]
+  let fetched: NostrEvent[]
+  try {
+    const { have, need } = await reconcile(RELAY_URL, filter, [...known.values()])
+    gone = have
+    fetched = await fetchByIds(pubkey, need)
+  } catch (error) {
+    // No NIP-77 sync: load everything, as without a cache.
+    console.warn('Loading all places: the relay could not sync changes.', error)
+    const all = await fetchAll(pubkey, (loaded) => {
+      if (run === generation) setState({ loaded })
+    })
+    const onRelay = new Set(all.map((event) => event.id))
+    gone = [...known.keys()].filter((id) => !onRelay.has(id))
+    fetched = all.filter((event) => !known.has(event.id))
+  }
+  if (run !== generation) return false
+  fetched = fetched.filter((event) => !superseded.has(event.id))
+  for (const id of gone) known.delete(id)
+  for (const event of fetched) {
+    known.set(event.id, { id: event.id, created_at: event.created_at, d: dOf(event), event })
+  }
+  return gone.length > 0 || fetched.length > 0
+}
+
+// Your private place events with these ids, PAGE_SIZE at a time.
+async function fetchByIds(pubkey: string, ids: string[]): Promise<NostrEvent[]> {
+  const events: NostrEvent[] = []
+  for (const batch of chunks(ids, PAGE_SIZE)) {
+    events.push(
+      ...(await placesPool.querySync([RELAY_URL], {
+        ids: batch,
+        kinds: [PRIVATE_PLACE_KIND],
+        authors: [pubkey],
+      })),
+    )
+  }
+  return events
+}
+
+// The newest version of each place (by d). Relays keep the latest, and on a
+// tie the lower id.
+function newestByPlace(entries: Iterable<Known>): Known[] {
+  const newest = new Map<string, Known>()
+  for (const entry of entries) {
+    if (!entry.d) continue
+    const seen = newest.get(entry.d)
+    if (
+      !seen ||
+      entry.created_at > seen.created_at ||
+      (entry.created_at === seen.created_at && entry.id < seen.id)
+    ) {
+      newest.set(entry.d, entry)
+    }
+  }
+  return [...newest.values()]
 }
 
 // Saves a new place (no id) or a new version of one; returns the saved place.
@@ -156,8 +344,10 @@ export async function savePlace(draft: PlaceDraft): Promise<Place> {
   const inner = keepUnmanagedTags(innerPlace({ ...draft, id }), previous?.inner)
   if (!placeFromInner(inner)) throw new Error('This place is missing its name or position.')
   const createdAt = Math.max(nowSeconds(), (previous?.createdAt ?? 0) + 1, lastDeletion + 1)
-  await publish(await sealPlace(inner, nostr, pubkey, createdAt))
-  const place = keep(inner, createdAt)!
+  const event = await sealPlace(inner, nostr, pubkey, createdAt)
+  await publish(event)
+  remember(event, inner, previous?.eventId)
+  const place = keep(inner, createdAt, event.id)!
   showRecords()
   return place
 }
@@ -184,6 +374,7 @@ async function deleteIds(ids: string[], onProgress?: (done: number, total: numbe
   let done = 0
   await runAll(batches, undefined, async (batch) => {
     await publish(await deletionEvent(batch, nostr, pubkey, createdAt))
+    forget(batch.flatMap((id) => records.get(id)?.eventId ?? []))
     for (const id of batch) records.delete(id)
     done += batch.length
     onProgress?.(done, ids.length)
@@ -247,24 +438,32 @@ export async function importPlaces(
     return at
   }
   const dated = plan.writes.map((write) => ({ ...write, createdAt: nextDate(write.previous) }))
+  // Each place's current event, to replace when a new version is saved.
+  const eventIdOf = (inner: InnerPlace) => {
+    const d = inner.tags.find((t) => t[0] === 'd')?.[1]
+    return d ? records.get(d)?.eventId : undefined
+  }
 
   let done = 0
   let failed = 0
   let saved = 0
   onProgress?.(0, dated.length)
   await runAll(dated, signal, async ({ inner, createdAt }) => {
-    let event = inner
+    let saving = inner
+    let event: NostrEvent
     try {
-      await publish(await sealPlace(inner, nostr, pubkey, createdAt))
+      event = await sealPlace(saving, nostr, pubkey, createdAt)
+      await publish(event)
     } catch (error) {
       // A place deleted from this relay can't come back under its address.
       if (!String(error).includes('deleted')) {
         failed++
         return
       }
-      event = withNewId(inner)
+      saving = withNewId(inner)
       try {
-        await publish(await sealPlace(event, nostr, pubkey, createdAt))
+        event = await sealPlace(saving, nostr, pubkey, createdAt)
+        await publish(event)
       } catch {
         failed++
         return
@@ -272,7 +471,8 @@ export async function importPlaces(
     } finally {
       onProgress?.(++done, dated.length)
     }
-    keep(event, createdAt)
+    remember(event, saving, saving === inner ? eventIdOf(inner) : undefined)
+    keep(saving, createdAt, event.id)
     saved++
   })
   showRecords()
@@ -356,33 +556,4 @@ async function fetchAll(pubkey: string, onPage?: (loaded: number) => void): Prom
     until = Math.min(...page.map((e) => e.created_at))
   }
   return [...byId.values()]
-}
-
-// The newest version of each place, decrypted, with its date; events that
-// don't decrypt or aren't valid places are skipped.
-async function openEvents(
-  events: NostrEvent[],
-  nostr: Nostr,
-  onProgress: (opened: number) => void,
-): Promise<[InnerPlace, number][]> {
-  const newest = new Map<string, NostrEvent>()
-  for (const event of events) {
-    const d = event.tags.find((t) => t[0] === 'd')?.[1]
-    if (!d) continue
-    const seen = newest.get(d)
-    if (!seen || event.created_at > seen.created_at) newest.set(d, event)
-  }
-  const opened: [InnerPlace, number][] = []
-  let done = 0
-  await runAll([...newest.values()], undefined, async (event) => {
-    try {
-      const inner = await openPlace(event, nostr)
-      if (placeFromInner(inner)) opened.push([inner, event.created_at])
-      else console.warn('Skipping an invalid place', event.id)
-    } catch (error) {
-      console.warn('Skipping a place that does not decrypt', event.id, error)
-    }
-    if (++done % 50 === 0 || done === newest.size) onProgress(done)
-  })
-  return opened
 }

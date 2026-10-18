@@ -1,5 +1,6 @@
 import 'fake-indexeddb/auto'
-import { generateSecretKey } from 'nostr-tools'
+import { generateSecretKey, getPublicKey } from 'nostr-tools'
+import { SimplePool } from 'nostr-tools/pool'
 import * as nip19 from 'nostr-tools/nip19'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -48,7 +49,7 @@ describe.skipIf(!HOST)('places on the relay', () => {
     await keystore.lock()
     await keystore.unlock('pw')
     const getPlaces = store.getPlacesState
-    await vi.waitFor(() => expect(getPlaces().status).toBe('ready'), {
+    await vi.waitFor(() => expect(getPlaces()).toMatchObject({ status: 'ready', syncing: false }), {
       timeout: 5000,
     })
     const names = getPlaces()
@@ -77,7 +78,9 @@ describe.skipIf(!HOST)('places on the relay', () => {
     const store = await import('./placeStore')
     const { innerPlace } = await import('./placeEvents')
     await keystore.importKey(nip19.nsecEncode(generateSecretKey()), 'pw')
-    await vi.waitFor(() => expect(store.getPlacesState().status).toBe('ready'))
+    await vi.waitFor(() =>
+      expect(store.getPlacesState()).toMatchObject({ status: 'ready', syncing: false }),
+    )
 
     const places = Array.from({ length: 30 }, (_, i) => ({
       ...innerPlace({
@@ -104,7 +107,9 @@ describe.skipIf(!HOST)('places on the relay', () => {
     // A fresh session reads them all back from the relay.
     await keystore.lock()
     await keystore.unlock('pw')
-    await vi.waitFor(() => expect(store.getPlacesState().status).toBe('ready'))
+    await vi.waitFor(() =>
+      expect(store.getPlacesState()).toMatchObject({ status: 'ready', syncing: false }),
+    )
     expect(store.getPlacesState().places.features).toHaveLength(30)
 
     expect(await store.deleteAllPlaces()).toBe(30)
@@ -123,7 +128,9 @@ describe.skipIf(!HOST)('places on the relay', () => {
     const store = await import('./placeStore')
     const { innerPlace } = await import('./placeEvents')
     await keystore.importKey(nip19.nsecEncode(generateSecretKey()), 'pw')
-    await vi.waitFor(() => expect(store.getPlacesState().status).toBe('ready'))
+    await vi.waitFor(() =>
+      expect(store.getPlacesState()).toMatchObject({ status: 'ready', syncing: false }),
+    )
     const places = Array.from({ length: 200 }, (_, i) => ({
       ...innerPlace({ id: `c${i}`, name: `Cancel ${i}`, lngLat: [2 + i / 100, 47] }),
       created_at: 1,
@@ -156,7 +163,9 @@ describe.skipIf(!HOST)('places on the relay', () => {
     const store = await import('./placeStore')
     const { innerPlace } = await import('./placeEvents')
     await keystore.importKey(nip19.nsecEncode(generateSecretKey()), 'pw')
-    await vi.waitFor(() => expect(store.getPlacesState().status).toBe('ready'))
+    await vi.waitFor(() =>
+      expect(store.getPlacesState()).toMatchObject({ status: 'ready', syncing: false }),
+    )
     const places = Array.from({ length: 8 }, (_, i) => ({
       ...innerPlace({ id: `q${i}`, name: `Ask ${i}`, lngLat: [3 + i / 100, 47] }),
       created_at: 1,
@@ -177,4 +186,71 @@ describe.skipIf(!HOST)('places on the relay', () => {
     expect(accepted).toMatchObject({ cancelled: false, saved: 8 })
     await store.deleteAllPlaces()
   }, 60000)
+  it('loads only what changed since the last visit', async () => {
+    const keystore = await import('./keystore')
+    const store = await import('./placeStore')
+    const { readCache } = await import('./placeCache')
+    const { deletionEvent, innerPlace, sealPlace } = await import('./placeEvents')
+    const { localNostr } = await import('./signer')
+    const settled = () =>
+      vi.waitFor(() =>
+        expect(store.getPlacesState()).toMatchObject({ status: 'ready', syncing: false }),
+      )
+    const sk = generateSecretKey()
+    const pubkey = getPublicKey(sk)
+    await keystore.importKey(nip19.nsecEncode(sk), 'pw')
+    await settled()
+    await store.savePlace({ name: 'Kept', lngLat: [1, 1] })
+    const gone = await store.savePlace({ name: 'Deleted elsewhere', lngLat: [2, 2] })
+
+    // Another device adds a place and deletes one, straight on the relay.
+    const nostr = localNostr(sk)
+    const goneAt = store.exportPlaces().places.find((p) => p.tags[0][1] === gone.properties.id)!
+    const later = (goneAt.created_at ?? 0) + 1
+    const added = await sealPlace(
+      innerPlace({ id: 'elsewhere', name: 'Added elsewhere', lngLat: [3, 3] }),
+      nostr,
+      pubkey,
+    )
+    const deletion = await deletionEvent(gone.properties.id, nostr, pubkey, later)
+    const relay = new SimplePool()
+    for (const event of [added, deletion]) {
+      await Promise.any(relay.publish([`ws://${HOST}/relay`], event))
+    }
+    relay.destroy()
+
+    // A new visit: the browser's copy first, then only the changes, by negentropy.
+    const warn = vi.spyOn(console, 'warn')
+    await keystore.lock()
+    await keystore.unlock('pw')
+    await settled()
+    const names = store
+      .getPlacesState()
+      .places.features.map((f) => f.properties.name)
+      .sort()
+    expect(names).toEqual(['Added elsewhere', 'Kept'])
+    expect(warn.mock.calls.flat().join(' ')).not.toContain('Loading all places')
+    // The cache now holds the same two places, decrypted under the cache key.
+    await vi.waitFor(
+      async () =>
+        expect(
+          (await readCache(pubkey, nostr))
+            .filter((p) => p.inner)
+            .map((p) => p.d)
+            .sort(),
+        ).toEqual(
+          [
+            'elsewhere',
+            (await import('./placeStore'))
+              .getPlacesState()
+              .places.features.find((f) => f.properties.name === 'Kept')!.properties.id,
+          ].sort(),
+        ),
+      { timeout: 5000 },
+    )
+
+    // Removing the key from this browser removes its cache too.
+    await keystore.forgetKey()
+    await vi.waitFor(async () => expect(await readCache(pubkey, nostr)).toEqual([]))
+  }, 30000)
 })

@@ -7,12 +7,12 @@
   or the storage read-write scope). The daily disk snapshots were dropped
   (2026-10-18), so until then there is no backup.
 
-- **The app loads only what it needs, not every place on each visit.**
-  Keep the places in the browser and fetch only what changed. Fetching newer
-  events with `since` misses deletions and replaced versions, so it needs a
-  proper solution: negentropy (NIP-77), which strfry supports, would compare
-  what the browser holds with what the relay holds and transfer only the
-  difference.
+- **First visit on a new device decrypts every place.** Repeat visits read the
+  browser's cache with one decryption, but a browser with no cache yet decrypts
+  each place once (about 5 s for 12,000 places through an extension, shown as
+  they come; longer on a phone). If that matters: an encrypted snapshot of all
+  places on the relay, under the same cache key, so a new device needs one
+  decryption and a download.
 
 - **Email alert on Google Cloud costs.** A budget of $1 a month on "My
   Billing Account" (`BILLING-ACCOUNT-ID`, the account `stede-cc` bills to),
