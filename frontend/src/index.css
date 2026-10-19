@@ -406,16 +406,17 @@ body,
   height: 100%;
 }
 /* Phones: run the map behind the browser's toolbar instead of stopping above
-   it. The app is as tall as the viewport with the bars hidden (lvh); what the
-   bars cover now is the difference with the visible height (dvh), wherever
-   the bars sit. */
-@supports (height: 100lvh) {
+   it. Safari 26 paints a plain band over fixed elements behind its floating
+   toolbar, and its largest viewport (100lvh) still ends behind that toolbar,
+   so the app is an ordinary box as tall as the screen (--screen-height, set
+   by useHiddenBottom) in a page that doesn't scroll. What the browser's bars
+   cover is measured live (--hidden-bottom), so controls sit just above them. */
+@media (pointer: coarse) {
+  body {
+    overflow: hidden;
+  }
   .app {
-    position: fixed;
-    inset: 0 0 auto;
-    height: 100lvh;
-    /* Measured live by useHiddenBottom where it can be (it also sees the
-       on-screen keyboard); this estimate covers the first paint. */
+    height: var(--screen-height, 100lvh);
     --covered-bottom: max(var(--hidden-bottom, calc(100lvh - 100dvh)), env(safe-area-inset-bottom, 0px));
   }
 }

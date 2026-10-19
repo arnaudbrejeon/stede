@@ -100,7 +100,7 @@ export function PlacesMap({
       if (!map) return
       const center = result.geometry.coordinates as [number, number]
       placeLocationMarker(map, center)
-      const offset = insetOffset(overlayInset(map.getContainer(), overlayRef?.current))
+      const offset = insetOffset(overlayInset(map, overlayRef?.current))
       // Short, so sweeping the pointer down the list stays responsive.
       map.easeTo({ center, offset, duration: 400 })
     },
@@ -109,7 +109,7 @@ export function PlacesMap({
       if (!map) return
       const center = result.geometry.coordinates as [number, number]
       placeLocationMarker(map, center)
-      const inset = overlayInset(map.getContainer(), overlayRef?.current)
+      const inset = overlayInset(map, overlayRef?.current)
       const extent = result.properties.extent
       // cameraForBounds rather than fitBounds: fitBounds' padding would persist on the map.
       const camera = extent
@@ -150,6 +150,20 @@ export function PlacesMap({
     }
     showMapType(savedMapType())
     mapRef.current = map
+    // On phones the map runs on behind the browser's bars (see .app in
+    // index.css): centring, fitting and locating aim at the part you can see.
+    // Measured against the window, not the visual viewport, so the on-screen
+    // keyboard doesn't move the map.
+    const padForBars = () => {
+      const hidden = Math.round(
+        Math.max(0, map.getContainer().getBoundingClientRect().bottom - window.innerHeight),
+      )
+      if (map.getPadding().bottom !== hidden) map.setPadding({ ...map.getPadding(), bottom: hidden })
+    }
+    padForBars()
+    // The container grows once the app is sized to the screen (useHiddenBottom).
+    map.on('resize', padForBars)
+    window.addEventListener('resize', padForBars)
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
     // Shows where you are and centres the map on you; one-off, not following.
     // A precise fix can take a while indoors (iPhones especially); one up to a
@@ -265,6 +279,7 @@ export function PlacesMap({
     }
 
     return () => {
+      window.removeEventListener('resize', padForBars)
       map.remove()
       mapRef.current = null
     }
@@ -300,7 +315,7 @@ export function PlacesMap({
     map.easeTo({
       center: place.geometry.coordinates as [number, number],
       // An offset rather than padding: map padding persists and would skew zooming later.
-      offset: insetOffset(overlayInset(map.getContainer(), overlayRef?.current)),
+      offset: insetOffset(overlayInset(map, overlayRef?.current)),
     })
     // Only a new selection should move the map, not later data or ref changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -428,12 +443,14 @@ function locateErrorMessage({ code }: { code: number }): string {
 // How much of the map a panel docked to the right or bottom edge covers. Uses
 // layout offsets rather than the bounding box so it's correct while the panel is
 // still sliding in.
-function overlayInset(container: HTMLElement, overlay: HTMLElement | null | undefined): Inset {
+// The part behind the browser's bars is already the map's bottom padding (see
+// padForBars), so it isn't counted again.
+function overlayInset(map: maplibregl.Map, overlay: HTMLElement | null | undefined): Inset {
   if (!overlay) return { right: 0, bottom: 0 }
-  const { clientWidth: w, clientHeight: h } = container
+  const { clientWidth: w, clientHeight: h } = map.getContainer()
   const spansHeight = overlay.offsetTop <= 0 && overlay.offsetHeight >= h
   if (spansHeight) return { right: Math.max(0, w - overlay.offsetLeft), bottom: 0 }
-  return { right: 0, bottom: Math.max(0, h - overlay.offsetTop) }
+  return { right: 0, bottom: Math.max(0, h - overlay.offsetTop - (map.getPadding().bottom ?? 0)) }
 }
 
 // Shift that centres a point in the area left visible beside the inset.

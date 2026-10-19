@@ -4,6 +4,7 @@ import { useEffect, type RefObject } from 'react'
 // home indicator, or the on-screen keyboard. Phones don't move the page for the
 // keyboard, they only shrink the visible area (the visual viewport), so this is
 // the one way to keep a bottom sheet's content above it. Sets on the element:
+//   --screen-height   px of the screen's height (phones make the app this tall)
 //   --hidden-bottom   px of the element below the visible area
 //   --visible-height  px of the visible area
 export function useHiddenBottom(ref: RefObject<HTMLElement | null>) {
@@ -14,6 +15,11 @@ export function useHiddenBottom(ref: RefObject<HTMLElement | null>) {
     const update = () => {
       // Pinch-zooming also shrinks the visible area; that's not something covering it.
       if (viewport.scale > 1.01) return
+      // screen.width and height don't swap when the phone turns on iOS.
+      const long = Math.max(screen.width, screen.height)
+      const short = Math.min(screen.width, screen.height)
+      const portrait = window.innerHeight >= window.innerWidth
+      el.style.setProperty('--screen-height', `${portrait ? long : short}px`)
       const visibleBottom = viewport.offsetTop + viewport.height
       const hidden = Math.max(0, el.getBoundingClientRect().bottom - visibleBottom)
       el.style.setProperty('--hidden-bottom', `${Math.round(hidden)}px`)
@@ -22,9 +28,11 @@ export function useHiddenBottom(ref: RefObject<HTMLElement | null>) {
     update()
     viewport.addEventListener('resize', update)
     viewport.addEventListener('scroll', update)
+    window.addEventListener('resize', update)
     return () => {
       viewport.removeEventListener('resize', update)
       viewport.removeEventListener('scroll', update)
+      window.removeEventListener('resize', update)
     }
   }, [ref])
 }
