@@ -1008,6 +1008,8 @@ body,
   background: var(--rubric);
   border-radius: 8px;
   box-shadow: 0 2px 12px rgba(var(--shadow), 0.2);
+  width: max-content;
+  max-width: min(480px, calc(100% - 32px));
 }
 
 .places-data {

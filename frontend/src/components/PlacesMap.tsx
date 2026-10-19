@@ -44,6 +44,8 @@ type PlacesMapProps = {
   onPinDrop?: (point: LngLat) => void
   // The dropped pin, if any.
   pin?: LngLat | null
+  // Told why your position couldn't be found, after a tap on the locate button.
+  onLocateError?: (message: string) => void
 }
 
 export function PlacesMap({
@@ -56,6 +58,7 @@ export function PlacesMap({
   overlayRef,
   onPinDrop,
   pin = null,
+  onLocateError,
 }: PlacesMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
@@ -65,6 +68,7 @@ export function PlacesMap({
   // The base map shown, which decides how the place layers are drawn.
   const mapTypeRef = useRef<MapType>(savedMapType())
   const onSelectRef = useRef(onSelect)
+  const onLocateErrorRef = useRef(onLocateError)
   const tagColorsRef = useRef(tagColors)
   // View from before the drawer opened, restored when it closes. Dropped if the
   // user moves the map meanwhile, so closing never undoes their own panning.
@@ -148,11 +152,29 @@ export function PlacesMap({
     mapRef.current = map
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
     // Shows where you are and centres the map on you; one-off, not following.
+    // A precise fix can take a while indoors (iPhones especially); one up to a
+    // minute old will do.
     const geolocate = new maplibregl.GeolocateControl({
-      positionOptions: { enableHighAccuracy: true, timeout: 10_000 },
+      positionOptions: { enableHighAccuracy: true, timeout: 30_000, maximumAge: 60_000 },
       fitBoundsOptions: { maxZoom: 15 },
     })
     map.addControl(geolocate, 'top-right')
+    geolocate.on('error', (error) => onLocateErrorRef.current?.(locateErrorMessage(error)))
+    // When the browser says location is denied, MapLibre greys the button out,
+    // so a tap does nothing and says nothing. Keep it tappable: the tap then
+    // explains (see onLocateError), or works once location is allowed again.
+    const locateButton = map
+      .getContainer()
+      .querySelector<HTMLButtonElement>('button.maplibregl-ctrl-geolocate')
+    if (locateButton) {
+      new MutationObserver(() => {
+        if (!locateButton.disabled) return
+        locateButton.disabled = false
+        locateButton.title = 'Find my location'
+        locateButton.setAttribute('aria-label', 'Find my location')
+        // Its title is set once MapLibre has checked; before that it's still setting up.
+      }).observe(locateButton, { attributeFilter: ['title'] })
+    }
     map.addControl(
       new MapTypeControl(savedMapType(), (type) => {
         saveMapType(type)
@@ -309,9 +331,10 @@ export function PlacesMap({
 
   useEffect(() => {
     onSelectRef.current = onSelect
+    onLocateErrorRef.current = onLocateError
     // Markers already drawn keep their colours; tag colours are fixed for the session.
     tagColorsRef.current = tagColors
-  }, [onSelect, tagColors])
+  }, [onSelect, onLocateError, tagColors])
 
   return <div ref={containerRef} className="map" />
 }
@@ -387,6 +410,21 @@ function addLayers(map: maplibregl.Map, ink: PlaceInk) {
 
 type Inset = { right: number; bottom: number }
 
+// Why your position couldn't be found, and what to do about it.
+// Codes as in GeolocationPositionError: 1 denied, 2 unavailable, 3 timeout.
+function locateErrorMessage({ code }: { code: number }): string {
+  if (code === 1) {
+    const iPhone = /iPhone|iPad/.test(navigator.userAgent)
+    return iPhone
+      ? 'Location is off for stede.cc. Check Settings → Privacy & Security → Location Services → Safari Websites (While Using), and in Safari aA → Website Settings → Location (Allow).'
+      : 'Location is off for stede.cc: allow it in your browser’s site settings.'
+  }
+  if (code === 3) {
+    return 'Finding your position took too long. Try again, ideally near a window or outside.'
+  }
+  return 'Your position isn’t available right now.'
+}
+
 // How much of the map a panel docked to the right or bottom edge covers. Uses
 // layout offsets rather than the bounding box so it's correct while the panel is
 // still sliding in.
@@ -413,7 +451,10 @@ function toMapData(places: Places): Places {
     ...places,
     features: places.features.map((f) => {
       const icon = placeIcon(f.properties.icon, f.properties.category)
-      return { ...f, properties: { ...f.properties, marker: markerImageId(icon, f.properties.tags) } }
+      return {
+        ...f,
+        properties: { ...f.properties, marker: markerImageId(icon, f.properties.tags) },
+      }
     }),
   }
 }

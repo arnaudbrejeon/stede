@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AddPlaceSearch } from './components/AddPlaceSearch'
 import { Drawer } from './components/Drawer'
 import { FilterPanel } from './components/FilterPanel'
@@ -30,6 +30,13 @@ function App() {
   // Adding a place needs the key: '+' asks for it first, then carries on.
   const [addAfterUnlock, setAddAfterUnlock] = useState(false)
   const { status: keyStatus } = useKey()
+  // Why your position couldn't be found; shown for a while, or until tapped.
+  const [locateError, setLocateError] = useState<string | null>(null)
+  useEffect(() => {
+    if (!locateError) return
+    const timer = setTimeout(() => setLocateError(null), 12_000)
+    return () => clearTimeout(timer)
+  }, [locateError])
   const appRef = useRef<HTMLDivElement>(null)
   const drawerRef = useRef<HTMLElement>(null)
   const mapRef = useRef<PlacesMapHandle>(null)
@@ -128,9 +135,15 @@ function App() {
           overlayRef={drawerRef}
           onPinDrop={searching ? dropPin : undefined}
           pin={pin}
+          onLocateError={setLocateError}
         />
         {/* Filters are for browsing your places; out of the way while adding one. */}
         {placesError && <p className="places-error">{placesError}</p>}
+        {locateError && !placesError && (
+          <p className="places-error" role="alert" onClick={() => setLocateError(null)}>
+            {locateError}
+          </p>
+        )}
         {!searching && (
           <FilterPanel
             query={query}
