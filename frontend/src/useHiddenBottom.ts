@@ -25,14 +25,24 @@ export function useHiddenBottom(ref: RefObject<HTMLElement | null>) {
       el.style.setProperty('--hidden-bottom', `${Math.round(hidden)}px`)
       el.style.setProperty('--visible-height', `${Math.round(viewport.height)}px`)
     }
+    // On phones the app is taller than the window (it runs behind the
+    // toolbar), so Safari scrolls the page to bring a focused field above the
+    // keyboard, and only partly back once the keyboard closes, leaving the
+    // header off the top. The page never scrolls otherwise, and the sheet
+    // already keeps its content above the keyboard: put the page back.
+    const unscroll = () => {
+      if (window.scrollY !== 0 || window.scrollX !== 0) window.scrollTo(0, 0)
+    }
     update()
     viewport.addEventListener('resize', update)
     viewport.addEventListener('scroll', update)
     window.addEventListener('resize', update)
+    window.addEventListener('scroll', unscroll)
     return () => {
       viewport.removeEventListener('resize', update)
       viewport.removeEventListener('scroll', update)
       window.removeEventListener('resize', update)
+      window.removeEventListener('scroll', unscroll)
     }
   }, [ref])
 }
