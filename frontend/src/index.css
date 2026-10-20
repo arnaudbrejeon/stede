@@ -57,7 +57,7 @@ body,
   width: 100%;
   padding: 8px 10px;
   font: inherit;
-  font-size: 15px;
+  font-size: 16px; /* under 16px, iOS Safari zooms in on focus and stays zoomed */
   border: 1px solid var(--line);
   border-radius: 6px;
 }
@@ -201,7 +201,7 @@ body,
   width: 100%;
   padding: 8px 10px;
   font: inherit;
-  font-size: 15px;
+  font-size: 16px;
   border: 1px solid var(--line);
   border-radius: 6px;
 }
@@ -761,7 +761,7 @@ body,
   width: 100%;
   padding: 8px 10px;
   font: inherit;
-  font-size: 15px;
+  font-size: 16px;
   color: var(--ink);
   background: var(--panel);
   border: 1px solid var(--line);
@@ -855,7 +855,7 @@ body,
 .field textarea {
   padding: 8px 10px;
   font: inherit;
-  font-size: 15px;
+  font-size: 16px;
   color: var(--ink);
   background: var(--panel);
   border: 1px solid var(--line);
