@@ -11,9 +11,10 @@ import { uniqueLabels } from './tags'
 // place event {kind, tags, content}. The inner event follows the 31300 rules.
 //
 // What a place stores: its name, position, OpenStreetMap link, category (for its
-// icon), address, your labels, note and icon. Other OSM details (hours, phone,
-// website…) are fetched when the place is opened; an `osm:*`, `r` or `location`
-// tag in the event is the user's own value and wins over the fetched one.
+// icon), address, website (`r`, filled from OSM's when you save it), your
+// labels, note and icon. Other OSM details (hours, phone…) are fetched when the
+// place is opened; an `osm:*`, `r` or `location` tag in the event is the
+// user's own value and wins over the fetched one.
 
 export const PLACE_KIND = 31300
 export const PRIVATE_PLACE_KIND = 31301
@@ -55,6 +56,8 @@ export type UserFields = {
   note: string
   // undefined: the category's default icon.
   icon?: PlaceIconKey
+  // undefined: not typed, so OpenStreetMap's website (if any) is saved.
+  website?: string
 }
 
 export const NO_USER_FIELDS: UserFields = { labels: [], note: '' }
@@ -70,6 +73,7 @@ export type PlaceDraft = {
   osmType?: string
   osmId?: number
   address?: string | null
+  website?: string | null
   labels?: string[]
   note?: string | null
   icon?: string
@@ -84,6 +88,8 @@ export function placeTags(draft: PlaceDraft & { id: string }): string[][] {
     ...[4, 6, 9].map((length) => ['g', geohash(lat, lng, length)]),
   ]
   if (draft.address) tags.push(['location', draft.address])
+  const website = draft.website && webUrl(draft.website)
+  if (website) tags.push(['r', website])
   for (const label of uniqueLabels(draft.labels ?? [])) tags.push(['t', label])
   const osmType = draft.osmType && OSM_TYPES[draft.osmType]
   if (osmType && draft.osmId) {
@@ -100,7 +106,7 @@ export function innerPlace(draft: PlaceDraft & { id: string }): InnerPlace {
 
 // Tags the app writes from a draft. Any other tag (another app's label, an OSM
 // value you set, an unknown tag) is carried over when a place is saved again.
-const MANAGED_TAGS = new Set(['d', 'name', 'geo', 'g', 'location', 't', 'i', 'k'])
+const MANAGED_TAGS = new Set(['d', 'name', 'geo', 'g', 'location', 'r', 't', 'i', 'k'])
 
 // A new version of a place: the draft's tags plus the previous version's tags
 // the app doesn't manage.
@@ -169,6 +175,7 @@ export function draftFromPlace(place: Place): PlaceDraft & { id: string } {
     osmType: p.osm_type,
     osmId: p.osm_id,
     address: p.address,
+    website: p.website,
     labels: p.tags,
     note: p.comment,
     icon: p.icon,
@@ -223,6 +230,21 @@ export function deletionEvent(
     ],
     content: '',
   })
+}
+
+// A link to a website as typed or as tagged in OSM ("bistro.fr",
+// "https://a.fr;https://b.fr"): its first http(s) URL, with https:// added when
+// there's no scheme. null when it isn't a web address.
+export function webUrl(value: string): string | null {
+  const first = value.split(';')[0].trim()
+  if (!first || /\s/.test(first)) return null
+  const url = /^[a-z][a-z\d+.-]*:/i.test(first) ? first : `https://${first}`
+  try {
+    const { protocol, hostname } = new URL(url)
+    return (protocol === 'http:' || protocol === 'https:') && hostname.includes('.') ? url : null
+  } catch {
+    return null
+  }
 }
 
 // [lng, lat] of an RFC 5870 geo path ("48.86004,2.32663", optionally "geo:" and ";params").

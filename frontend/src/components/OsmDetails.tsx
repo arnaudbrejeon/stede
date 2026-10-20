@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react'
+import { osmWebsite } from '../osm'
+import { webUrl } from '../placeEvents'
 import type { PlaceImage } from '../placeImage'
 import type { OsmDetailsState } from '../useOsmDetails'
 
@@ -22,9 +24,15 @@ export function OsmImage({ image, alt }: { image: PlaceImage | null | undefined;
   )
 }
 
-export function OsmFacts({ tags, failed }: Pick<OsmDetailsState, 'tags' | 'failed'>) {
+type OsmFactsProps = Pick<OsmDetailsState, 'tags' | 'failed'> & {
+  // A saved place's own website, shown instead of OSM's.
+  website?: string | null
+}
+
+export function OsmFacts({ tags, failed, website: own }: OsmFactsProps) {
   const phone = tags.phone ?? tags['contact:phone']
-  const website = tags.website ?? tags['contact:website']
+  const website = webUrl(own || osmWebsite(tags) || '')
+  const menu = webUrl(tags['website:menu'] ?? '')
   return (
     <>
       <dl className="result-facts">
@@ -39,6 +47,13 @@ export function OsmFacts({ tags, failed }: Pick<OsmDetailsState, 'tags' | 'faile
           <Fact label="Website">
             <a href={website} target="_blank" rel="noopener">
               {hostname(website)}
+            </a>
+          </Fact>
+        )}
+        {menu && (
+          <Fact label="Menu">
+            <a href={menu} target="_blank" rel="noopener">
+              {hostname(menu)}
             </a>
           </Fact>
         )}

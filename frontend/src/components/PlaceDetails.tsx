@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { osmWebsite, type OsmTags } from '../osm'
 import { draftFromPlace, type UserFields } from '../placeEvents'
 import type { Place } from '../places'
 import { deletePlace, savePlace } from '../placeStore'
@@ -21,7 +22,6 @@ export function PlaceDetails({ place, tagColors, allLabels, onDeleted }: PlaceDe
   // Places matched to OpenStreetMap get its image, hours, website…
   const coordinates = place.geometry.coordinates as [number, number]
   const { tags, failed, image } = useOsmDetails(p.osm_type, p.osm_id, coordinates)
-  const osmWebsite = tags.website ?? tags['contact:website']
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -42,6 +42,7 @@ export function PlaceDetails({ place, tagColors, allLabels, onDeleted }: PlaceDe
     return (
       <PlaceEditor
         place={place}
+        osmTags={tags}
         tagColors={tagColors}
         allLabels={allLabels}
         onDone={() => setEditing(false)}
@@ -65,12 +66,7 @@ export function PlaceDetails({ place, tagColors, allLabels, onDeleted }: PlaceDe
         </ul>
       )}
       {p.comment && <p className="drawer-comment">{p.comment}</p>}
-      <OsmFacts tags={tags} failed={failed} />
-      {!osmWebsite && p.website && (
-        <a href={p.website} target="_blank" rel="noopener">
-          Website
-        </a>
-      )}
+      <OsmFacts tags={tags} failed={failed} website={p.website} />
       {p.builtin ? (
         <p className="builtin-note">
           Stede’s first place, until you have your own: tap + to add one.
@@ -112,19 +108,22 @@ export function PlaceDetails({ place, tagColors, allLabels, onDeleted }: PlaceDe
 
 type PlaceEditorProps = {
   place: Place
+  // Its OpenStreetMap tags, for the website when it has none of its own.
+  osmTags: OsmTags
   tagColors: TagColors
   allLabels: readonly string[]
   onDone: () => void
 }
 
-// Your own data on a saved place: its name, icon, labels and comment.
-function PlaceEditor({ place, tagColors, allLabels, onDone }: PlaceEditorProps) {
+// Your own data on a saved place: its name, icon, labels, website and comment.
+function PlaceEditor({ place, osmTags, tagColors, allLabels, onDone }: PlaceEditorProps) {
   const p = place.properties
   const [name, setName] = useState(p.name)
   const [fields, setFields] = useState<UserFields>({
     labels: p.tags,
     note: p.comment ?? '',
     icon: p.icon,
+    website: p.website ?? undefined,
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -133,7 +132,12 @@ function PlaceEditor({ place, tagColors, allLabels, onDone }: PlaceEditorProps) 
     setSaving(true)
     setError(null)
     try {
-      await savePlace({ ...draftFromPlace(place), name, ...fields })
+      await savePlace({
+        ...draftFromPlace(place),
+        name,
+        ...fields,
+        website: fields.website ?? osmWebsite(osmTags),
+      })
       onDone()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -155,6 +159,7 @@ function PlaceEditor({ place, tagColors, allLabels, onDone }: PlaceEditorProps) 
         onChange={setFields}
         category={p.category}
         categoryKey={p.category_key}
+        osmWebsite={osmWebsite(osmTags)}
         allLabels={allLabels}
         tagColors={tagColors}
       />

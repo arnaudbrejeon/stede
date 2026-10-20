@@ -10,6 +10,7 @@ import {
   parseGeo,
   placeFromInner,
   sealPlace,
+  webUrl,
   type PlaceDraft,
 } from './placeEvents'
 
@@ -73,6 +74,27 @@ describe('place events', () => {
     })
     // Saving it again keeps everything.
     expect(innerPlace(draftFromPlace(place))).toEqual(innerPlace(orsay))
+  })
+
+  it('stores the website as an r tag', () => {
+    const inner = innerPlace({ ...orsay, website: 'musee-orsay.fr' })
+    expect(inner.tags.filter((t) => t[0] === 'r')).toEqual([['r', 'https://musee-orsay.fr']])
+    const place = placeFromInner(inner)!
+    expect(place.properties.website).toBe('https://musee-orsay.fr')
+    expect(innerPlace(draftFromPlace(place))).toEqual(inner)
+    // Cleared, or not a web address: no website.
+    expect(innerPlace({ ...orsay, website: '' }).tags.some((t) => t[0] === 'r')).toBe(false)
+    expect(innerPlace({ ...orsay, website: 'call us' }).tags.some((t) => t[0] === 'r')).toBe(false)
+  })
+
+  it('reads websites as typed or tagged in OSM', () => {
+    expect(webUrl('https://www.bistro.example/')).toBe('https://www.bistro.example/')
+    expect(webUrl(' bistro.example/menu ')).toBe('https://bistro.example/menu')
+    expect(webUrl('http://a.example;https://b.example')).toBe('http://a.example')
+    expect(webUrl('javascript:alert(1)')).toBeNull()
+    expect(webUrl('mailto:hi@bistro.example')).toBeNull()
+    expect(webUrl('closed')).toBeNull()
+    expect(webUrl('')).toBeNull()
   })
 
   it('keeps a dropped pin minimal', () => {

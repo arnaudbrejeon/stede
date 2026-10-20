@@ -14,6 +14,8 @@ the tags. What a Mapstr place becomes:
     stede.category      -> osm:<key> = category, when its OSM key is known
     osm.type, osm.id    -> i = osm:<type>/<id>, k = osm
 
+Websites (r) come from OpenStreetMap afterwards: see scripts/osm_websites.py.
+
 The matching details (osm.name, distance, score, source, osm_tried) are left
 out: they describe how a place was matched, not the place.
 
@@ -29,6 +31,7 @@ import unicodedata
 import uuid
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlsplit
 
 FILE_FORMAT = "stede-places"
 FILE_VERSION = 1
@@ -303,3 +306,23 @@ def merge_places(base: dict[str, Any], other: dict[str, Any]) -> dict[str, Any]:
     a, b = base["content"].strip(), other["content"].strip()
     content = base["content"] if not b or b in a else b if not a else f"{a}\n\n{b}"
     return {"kind": base["kind"], "tags": tags, "content": content}
+
+
+def web_url(value: str) -> str | None:
+    """A website as tagged in OSM ("bistro.fr", "https://a.fr;https://b.fr"):
+    its first http(s) URL, with https:// added when there's no scheme (as the
+    app's webUrl). None when it isn't a web address."""
+    first = value.split(";")[0].strip()
+    if not first or re.search(r"\s", first):
+        return None
+    url = (
+        first
+        if re.match(r"[a-z][a-z\d+.-]*:", first, re.IGNORECASE)
+        else f"https://{first}"
+    )
+    parts = urlsplit(url)
+    if parts.scheme.lower() not in ("http", "https") or "." not in (
+        parts.hostname or ""
+    ):
+        return None
+    return url

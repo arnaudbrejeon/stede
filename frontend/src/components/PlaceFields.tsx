@@ -21,6 +21,8 @@ type PlaceFieldsProps = {
   // The place's OSM category, for the default icon.
   category?: string
   categoryKey?: string
+  // OpenStreetMap's website for the place, shown until you type your own.
+  osmWebsite?: string
   // Labels already used on other places, offered as suggestions.
   allLabels: readonly string[]
   tagColors: TagColors
@@ -31,10 +33,12 @@ export function PlaceFields({
   onChange,
   category,
   categoryKey,
+  osmWebsite,
   allLabels,
   tagColors,
 }: PlaceFieldsProps) {
   const noteId = useId()
+  const websiteId = useId()
   return (
     <div className="place-fields">
       <IconField
@@ -48,6 +52,20 @@ export function PlaceFields({
         allLabels={allLabels}
         tagColors={tagColors}
       />
+      <div className="field">
+        <label htmlFor={websiteId}>Website</label>
+        <input
+          id={websiteId}
+          type="text"
+          inputMode="url"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          value={value.website ?? osmWebsite ?? ''}
+          onChange={(e) => onChange({ ...value, website: e.target.value })}
+          placeholder="https://…"
+        />
+      </div>
       <div className="field">
         <label htmlFor={noteId}>Comment</label>
         <textarea

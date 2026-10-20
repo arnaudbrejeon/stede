@@ -1,4 +1,4 @@
-from stede.places_file import from_exports, from_mapstr, geohash
+from stede.places_file import from_exports, from_mapstr, geohash, web_url
 
 
 def feature(name="Asador Ordoki", coords=(-1.488036, 43.179929), **props):
@@ -153,3 +153,13 @@ def test_unknown_category_keeps_the_icon_only():
 def test_geohash_matches_the_relay():
     assert geohash(48.86004, 2.32663, 9) == "u09tuywnq"
     assert geohash(-33.8688, 151.2093, 9) == "r3gx2f77b"
+
+
+def test_web_url_reads_osm_websites():
+    assert web_url("https://www.bistro.example/") == "https://www.bistro.example/"
+    assert web_url(" bistro.example/menu ") == "https://bistro.example/menu"
+    assert web_url("http://a.example;https://b.example") == "http://a.example"
+    assert web_url("javascript:alert(1)") is None
+    assert web_url("mailto:hi@bistro.example") is None
+    assert web_url("closed") is None
+    assert web_url("") is None

@@ -1,5 +1,6 @@
 import { resultSubtitle, resultTitle, streetAddress, type GeocodeResult } from '../geocoder'
 import { useState } from 'react'
+import { osmWebsite } from '../osm'
 import { NO_USER_FIELDS } from '../placeEvents'
 import type { Place } from '../places'
 import type { TagColors } from '../tags'
@@ -42,6 +43,7 @@ export function ResultDetails({ result, onBack, onSaved, allLabels, tagColors }:
         onChange={setFields}
         category={p.osm_value}
         categoryKey={p.osm_key}
+        osmWebsite={osmWebsite(tags)}
         allLabels={allLabels}
         tagColors={tagColors}
       />
@@ -56,6 +58,7 @@ export function ResultDetails({ result, onBack, onSaved, allLabels, tagColors }:
           osmId: p.osm_id,
           address: streetAddress(p),
           ...fields,
+          website: fields.website ?? osmWebsite(tags),
         }}
         onSaved={onSaved}
       />
