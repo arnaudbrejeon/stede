@@ -20,6 +20,8 @@ export type PhotonProperties = {
   city?: string
   state?: string
   country?: string
+  // ISO 3166-1 alpha-2, e.g. "FR".
+  countrycode?: string
   // [minLon, maxLat, maxLon, minLat]
   extent?: [number, number, number, number]
   // From the centre of the view searched from (added by our backend).

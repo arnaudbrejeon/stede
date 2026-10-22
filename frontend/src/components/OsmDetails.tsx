@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react'
+import type { Where } from '../openingHours'
 import { webUrl } from '../placeEvents'
 import type { PlaceWebsite } from '../placeWebsite'
 import type { PlaceImage } from '../placeImage'
+import { useOpeningHours } from '../useOpeningHours'
 import type { OsmDetailsState } from '../useOsmDetails'
 
 export function OsmImage({ image, alt }: { image: PlaceImage | null | undefined; alt: string }) {
@@ -29,9 +31,11 @@ type OsmFactsProps = Pick<OsmDetailsState, 'tags' | 'failed'> & {
   found: PlaceWebsite | null | undefined
   // A saved place's own website, shown instead of the one found.
   own?: string | null
+  // Where the place is, to tell whether it's open now.
+  where: Where
 }
 
-export function OsmFacts({ tags, failed, found, own }: OsmFactsProps) {
+export function OsmFacts({ tags, failed, found, own, where }: OsmFactsProps) {
   const phone = tags.phone ?? tags['contact:phone']
   const ownUrl = own ? webUrl(own) : null
   const website = ownUrl ?? found?.url
@@ -40,7 +44,11 @@ export function OsmFacts({ tags, failed, found, own }: OsmFactsProps) {
     <>
       <dl className="result-facts">
         {tags.cuisine && <Fact label="Cuisine">{tags.cuisine.split(';').join(', ')}</Fact>}
-        {tags.opening_hours && <Fact label="Hours">{tags.opening_hours}</Fact>}
+        {tags.opening_hours && (
+          <Fact label="Hours">
+            <Hours value={tags.opening_hours} where={where} />
+          </Fact>
+        )}
         {phone && (
           <Fact label="Phone">
             <a href={`tel:${phone.replace(/\s/g, '')}`}>{phone}</a>
@@ -65,6 +73,22 @@ export function OsmFacts({ tags, failed, found, own }: OsmFactsProps) {
         {tags.description && <Fact label="About">{tags.description}</Fact>}
       </dl>
       {failed && <p className="search-note">More details are unavailable right now.</p>}
+    </>
+  )
+}
+
+// Whether the place is open now, then its hours as OpenStreetMap writes them.
+function Hours({ value, where }: { value: string; where: Where }) {
+  const now = useOpeningHours(value, where)
+  return (
+    <>
+      {now && (
+        <span className={`hours-status ${now.state}`}>
+          <span className="swatch" aria-hidden="true" />
+          {now.label}
+        </span>
+      )}
+      <span className={now ? 'hours-value' : undefined}>{value}</span>
     </>
   )
 }

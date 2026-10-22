@@ -35,7 +35,12 @@ export function ResultDetails({ result, onBack, onSaved, allLabels, tagColors }:
       <h3>{resultTitle(p)}</h3>
       <p className="result-subtitle">{resultSubtitle(p)}</p>
 
-      <OsmFacts tags={tags} failed={failed} found={website} />
+      <OsmFacts
+        tags={tags}
+        failed={failed}
+        found={website}
+        where={{ lngLat: coordinates, countryCode: p.countrycode }}
+      />
 
       <PlaceFields
         value={fields}

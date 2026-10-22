@@ -72,7 +72,13 @@ export function PlaceDetails({ place, tagColors, allLabels, onDeleted }: PlaceDe
         </ul>
       )}
       {p.comment && <p className="drawer-comment">{p.comment}</p>}
-      <OsmFacts tags={tags} failed={failed} found={website} own={p.website} />
+      <OsmFacts
+        tags={tags}
+        failed={failed}
+        found={website}
+        own={p.website}
+        where={{ lngLat: coordinates }}
+      />
       {p.builtin ? (
         <p className="builtin-note">
           Stede’s first place, until you have your own: tap + to add one.
