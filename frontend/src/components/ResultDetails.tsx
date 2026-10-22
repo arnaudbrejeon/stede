@@ -1,6 +1,5 @@
 import { resultSubtitle, resultTitle, streetAddress, type GeocodeResult } from '../geocoder'
 import { useState } from 'react'
-import { osmWebsite } from '../osm'
 import { NO_USER_FIELDS } from '../placeEvents'
 import type { Place } from '../places'
 import type { TagColors } from '../tags'
@@ -22,7 +21,7 @@ type ResultDetailsProps = {
 export function ResultDetails({ result, onBack, onSaved, allLabels, tagColors }: ResultDetailsProps) {
   const p = result.properties
   const coordinates = result.geometry.coordinates as [number, number]
-  const { tags, failed, image } = useOsmDetails(p.osm_type, p.osm_id, coordinates)
+  const { tags, failed, image, website } = useOsmDetails(p.osm_type, p.osm_id, coordinates)
   const [fields, setFields] = useState(NO_USER_FIELDS)
 
   return (
@@ -36,14 +35,14 @@ export function ResultDetails({ result, onBack, onSaved, allLabels, tagColors }:
       <h3>{resultTitle(p)}</h3>
       <p className="result-subtitle">{resultSubtitle(p)}</p>
 
-      <OsmFacts tags={tags} failed={failed} />
+      <OsmFacts tags={tags} failed={failed} found={website} />
 
       <PlaceFields
         value={fields}
         onChange={setFields}
         category={p.osm_value}
         categoryKey={p.osm_key}
-        osmWebsite={osmWebsite(tags)}
+        foundWebsite={website?.url}
         allLabels={allLabels}
         tagColors={tagColors}
       />
@@ -58,7 +57,6 @@ export function ResultDetails({ result, onBack, onSaved, allLabels, tagColors }:
           osmId: p.osm_id,
           address: streetAddress(p),
           ...fields,
-          website: fields.website ?? osmWebsite(tags),
         }}
         onSaved={onSaved}
       />

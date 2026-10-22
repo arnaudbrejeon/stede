@@ -176,6 +176,11 @@ body,
 .result-facts a {
   color: var(--lapis);
 }
+.result-facts .fact-source,
+.result-facts .fact-source a {
+  font-size: 12px;
+  color: var(--muted);
+}
 .search-title {
   font-size: 14px;
 }

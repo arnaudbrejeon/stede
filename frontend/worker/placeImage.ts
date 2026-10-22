@@ -10,11 +10,10 @@
 // Results are cached in memory, for as long as Cloudflare keeps the worker.
 
 import { distanceM, type Fetch } from './http'
+import { fetchOsmTags, type OsmType, type Tags } from './osm'
 import { findWebsiteImage } from './websiteImage'
 
-const OSM_API = 'https://api.openstreetmap.org/api/0.6'
 const WIKIDATA_API = 'https://www.wikidata.org/w/api.php'
-const OSM_ELEMENT_TYPES = { N: 'node', W: 'way', R: 'relation' } as const
 const THUMB_WIDTH = 640
 const CACHE_SIZE = 1024
 // Finding nothing may be a transient failure (timeouts, bot challenges): retry later.
@@ -23,9 +22,6 @@ export const EMPTY_RESULT_TTL_MS = 10 * 60 * 1000
 const WIKIDATA_SEARCH_RADIUS = '500m'
 const WIKIDATA_MAX_DISTANCE_M = 300
 const NAME_TAGS = ['name', 'name:en', 'official_name', 'old_name', 'alt_name']
-
-export type OsmType = keyof typeof OSM_ELEMENT_TYPES
-export const OSM_TYPES = Object.keys(OSM_ELEMENT_TYPES) as OsmType[]
 
 // e.g. https://fr.wikipedia.org/wiki/Fichier:Tour_Eiffel.jpg or .../wiki/File:X.jpg
 const FILE_PAGE = /\/wiki\/[^/:]+:([^/?#]+)$/
@@ -40,7 +36,6 @@ export type PlaceImage = {
   source: { label: string; href: string }
 }
 
-type Tags = Record<string, string>
 type LatLon = [number, number]
 
 // "N/123" -> the image, and when it was found.
@@ -69,14 +64,6 @@ export async function findPlaceImage(
   cache.set(key, [image, Date.now()])
   if (cache.size > CACHE_SIZE) cache.delete(cache.keys().next().value!)
   return image
-}
-
-async function fetchOsmTags(fetch: Fetch, osmType: OsmType, osmId: number): Promise<Tags> {
-  const response = await fetch(`${OSM_API}/${OSM_ELEMENT_TYPES[osmType]}/${osmId}.json`)
-  if (response.status === 404 || response.status === 410) return {} // unknown or deleted
-  if (!response.ok) throw new Error(`OpenStreetMap answered ${response.status}`)
-  const elements = (await response.json()).elements ?? [{}]
-  return elements[0]?.tags ?? {}
 }
 
 async function imageFromTags(fetch: Fetch, tags: Tags, near?: LatLon): Promise<PlaceImage | null> {

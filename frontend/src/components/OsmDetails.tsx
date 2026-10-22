@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
-import { osmWebsite } from '../osm'
 import { webUrl } from '../placeEvents'
+import type { PlaceWebsite } from '../placeWebsite'
 import type { PlaceImage } from '../placeImage'
 import type { OsmDetailsState } from '../useOsmDetails'
 
@@ -25,14 +25,17 @@ export function OsmImage({ image, alt }: { image: PlaceImage | null | undefined;
 }
 
 type OsmFactsProps = Pick<OsmDetailsState, 'tags' | 'failed'> & {
-  // A saved place's own website, shown instead of OSM's.
-  website?: string | null
+  // The website found for the place.
+  found: PlaceWebsite | null | undefined
+  // A saved place's own website, shown instead of the one found.
+  own?: string | null
 }
 
-export function OsmFacts({ tags, failed, website: own }: OsmFactsProps) {
+export function OsmFacts({ tags, failed, found, own }: OsmFactsProps) {
   const phone = tags.phone ?? tags['contact:phone']
-  const website = webUrl(own || osmWebsite(tags) || '')
-  const menu = webUrl(tags['website:menu'] ?? '')
+  const ownUrl = own ? webUrl(own) : null
+  const website = ownUrl ?? found?.url
+  const menu = found?.menu
   return (
     <>
       <dl className="result-facts">
@@ -48,6 +51,7 @@ export function OsmFacts({ tags, failed, website: own }: OsmFactsProps) {
             <a href={website} target="_blank" rel="noopener">
               {hostname(website)}
             </a>
+            {!ownUrl && found && <FoundIn source={found.source} />}
           </Fact>
         )}
         {menu && (
@@ -55,6 +59,7 @@ export function OsmFacts({ tags, failed, website: own }: OsmFactsProps) {
             <a href={menu} target="_blank" rel="noopener">
               {hostname(menu)}
             </a>
+            {found && <FoundIn source={found.source} />}
           </Fact>
         )}
         {tags.description && <Fact label="About">{tags.description}</Fact>}
@@ -70,6 +75,18 @@ function hostname(url: string): string {
   } catch {
     return url
   }
+}
+
+// Where a website was found, since it isn't always right.
+function FoundIn({ source }: { source: PlaceWebsite['source'] }) {
+  return (
+    <span className="fact-source">
+      {' · '}
+      <a href={source.href} target="_blank" rel="noopener">
+        {source.label}
+      </a>
+    </span>
+  )
 }
 
 function Fact({ label, children }: { label: string; children: ReactNode }) {

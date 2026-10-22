@@ -11,10 +11,10 @@ import { uniqueLabels } from './tags'
 // place event {kind, tags, content}. The inner event follows the 31300 rules.
 //
 // What a place stores: its name, position, OpenStreetMap link, category (for its
-// icon), address, website (`r`, filled from OSM's when you save it), your
-// labels, note and icon. Other OSM details (hours, phone…) are fetched when the
-// place is opened; an `osm:*`, `r` or `location` tag in the event is the
-// user's own value and wins over the fetched one.
+// icon), address, your labels, note and icon, and a website (`r`) when you set
+// one. Other details (hours, phone, the website found for it…) are fetched
+// when the place is opened; an `osm:*`, `r` or `location` tag in the event is
+// the user's own value and wins over the fetched one.
 
 export const PLACE_KIND = 31300
 export const PRIVATE_PLACE_KIND = 31301
@@ -56,7 +56,7 @@ export type UserFields = {
   note: string
   // undefined: the category's default icon.
   icon?: PlaceIconKey
-  // undefined: not typed, so OpenStreetMap's website (if any) is saved.
+  // Your own website for the place; empty: the one found for it is shown.
   website?: string
 }
 

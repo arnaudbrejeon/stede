@@ -4,7 +4,9 @@
 
 import { addressAt, GeocodingError, searchPlaces, View } from './geocoding'
 import { withDefaults, type Fetch } from './http'
-import { findPlaceImage, OSM_TYPES, type OsmType } from './placeImage'
+import { OSM_TYPES, type OsmType } from './osm'
+import { findPlaceImage } from './placeImage'
+import { findPlaceWebsite } from './placeWebsite'
 import { fetchImage } from './websiteImage'
 
 type Context = { waitUntil(promise: Promise<unknown>): void }
@@ -12,7 +14,8 @@ type Context = { waitUntil(promise: Promise<unknown>): void }
 // How long Cloudflare (and browsers) may keep each kind of answer.
 const DAY = 86400
 const SEARCH_MAX_AGE = 3600
-const EMPTY_IMAGE_MAX_AGE = 600
+// Finding nothing may be a passing failure: ask again sooner.
+const EMPTY_MAX_AGE = 600
 
 export default {
   fetch(request: Request, _env: unknown, ctx: Context): Promise<Response> {
@@ -92,11 +95,18 @@ const ROUTES: Record<string, (params: URLSearchParams, fetch: Fetch) => Promise<
     const near: [number, number] | undefined =
       lat !== undefined && lon !== undefined ? [lat, lon] : undefined
     const image = await findPlaceImage(fetch, osmType, osmId, near)
-    if (!image) return json({ image: null }, 200, EMPTY_IMAGE_MAX_AGE)
+    if (!image) return json({ image: null }, 200, EMPTY_MAX_AGE)
     // Browsers load it through /api/place-image/file: third-party sites may block
     // them (hotlink protection, bot challenges, plain http) yet answer us.
     const display_url = `/api/place-image/file?${new URLSearchParams({ osm_type: osmType, osm_id: String(osmId) })}`
     return json({ image: { ...image, display_url } }, 200, DAY)
+  },
+
+  // The website (and menu) of an OpenStreetMap place, or null when none is found.
+  '/api/place-website': async (params, fetch) => {
+    const [osmType, osmId] = osmRef(params)
+    const website = await findPlaceWebsite(fetch, osmType, osmId)
+    return json({ website }, 200, website ? DAY : EMPTY_MAX_AGE)
   },
 
   // The image found for a place, fetched and served by us. Only ever serves the

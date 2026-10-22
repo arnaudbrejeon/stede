@@ -21,8 +21,8 @@ type PlaceFieldsProps = {
   // The place's OSM category, for the default icon.
   category?: string
   categoryKey?: string
-  // OpenStreetMap's website for the place, shown until you type your own.
-  osmWebsite?: string
+  // The website found for the place, shown as a hint until you type your own.
+  foundWebsite?: string | null
   // Labels already used on other places, offered as suggestions.
   allLabels: readonly string[]
   tagColors: TagColors
@@ -33,7 +33,7 @@ export function PlaceFields({
   onChange,
   category,
   categoryKey,
-  osmWebsite,
+  foundWebsite,
   allLabels,
   tagColors,
 }: PlaceFieldsProps) {
@@ -61,9 +61,9 @@ export function PlaceFields({
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
-          value={value.website ?? osmWebsite ?? ''}
+          value={value.website ?? ''}
           onChange={(e) => onChange({ ...value, website: e.target.value })}
-          placeholder="https://…"
+          placeholder={foundWebsite ?? 'https://…'}
         />
       </div>
       <div className="field">

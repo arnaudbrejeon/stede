@@ -17,8 +17,3 @@ export async function fetchOsmTags(
   const data: { elements: { tags?: OsmTags }[] } = await response.json()
   return data.elements[0]?.tags ?? {}
 }
-
-// The place's website as OSM tags it, if any.
-export function osmWebsite(tags: OsmTags): string | undefined {
-  return tags.website || tags['contact:website'] || undefined
-}
