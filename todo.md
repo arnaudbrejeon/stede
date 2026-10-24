@@ -25,10 +25,9 @@
   `uv export` of backend/, and Trivy on the relay image (its base, Alpine
   3.18, is end of life, so `apk upgrade` in relay/Dockerfile is all it gets
   until strfry's image moves on). The 2026-10-24 audit found vite, certifi
-  and OpenSSL/musl behind; all three are fixed in the repository, but the
-  relay's fix is not deployed yet (`deploy/deploy.sh relay`, a short
-  restart). Either a weekly reminder, or GitHub's Dependabot for npm and uv,
-  which opens pull requests by itself.
+  and OpenSSL/musl behind; all three fixed and deployed the same day. Either
+  a weekly reminder, or GitHub's Dependabot for npm and uv, which opens pull
+  requests by itself.
 
 ## Later
 
