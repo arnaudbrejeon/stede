@@ -4,7 +4,9 @@
 FROM ghcr.io/hoytech/strfry@sha256:36f1886d185a88ca57c66ebe52e6e9e8428dac2486eea0a5d50ff934f18b60c3
 
 USER root
-RUN apk --no-cache add python3
+# The image ships with the OpenSSL and musl of its Alpine release (3.18, end of
+# life): take the fixes the release still has before adding anything to it.
+RUN apk --no-cache upgrade && apk --no-cache add python3
 USER strfry
 
 COPY --chown=strfry:strfry strfry.conf /app/strfry.conf
