@@ -1,15 +1,5 @@
 # To do
 
-## Done since going live (2026-10-18)
-
-- A place's website: stored and editable, filled from OpenStreetMap, then found
-  through the API rather than stored from OSM (2026-10-19, 2026-10-22).
-- Opening hours from OpenStreetMap, with whether the place is open, closing
-  soon or closed right now (2026-10-22, opening_hours.js, loaded on demand).
-- iOS Safari: the map runs behind the floating toolbar, text fields don't zoom
-  the page, and the page stays put when a field is focused.
-- A reason when your position can't be found.
-
 ## Live since 2026-10-18 (see docs/deploy.md)
 
 - **Back up the relay with exports to a bucket.**
@@ -29,6 +19,14 @@
   `/api/address` pass requests on to Photon's free, fair-use server; abuse
   through stede.cc could get it blocked. Cloudflare's rate limiting can cap
   requests per visitor.
+
+- **Check for package upgrades once a week.** Security fixes only reach the
+  app when someone looks: `npm audit` in frontend/, `uvx pip-audit` on
+  `uv export` of backend/, and Trivy on the relay image (its base, Alpine
+  3.18, is end of life, so `apk upgrade` in relay/Dockerfile is all it gets
+  until strfry's image moves on). The 2026-10-24 audit found vite, certifi
+  and OpenSSL/musl behind. Either a weekly reminder, or GitHub's Dependabot
+  for npm and uv, which opens pull requests by itself.
 
 ## Later
 
@@ -56,6 +54,19 @@
   so its holidays count as ordinary days. Store the code (or the country) on
   save.
 
+- **A page in stede showing the relay's database.** Total events, number of
+  pubkeys, a histogram of events per pubkey, by kind, and the size of the
+  database on disk, so growth and abuse show up before the VM's 30 GB disk
+  does. The API on Cloudflare can't see the VM, so the figures come from the
+  relay side: a job next to the relay (cron on the VM, `strfry scan` or
+  `strfry export | jq`, `du` on strfry-db/) publishes them regularly as an
+  event the relay itself serves, say a replaceable kind 30078 signed by a
+  relay key. For the page only to be readable with my key: encrypt the
+  content with NIP-44 to my pubkey, as private places already are, so the
+  event is public but the numbers are not; NIP-42 AUTH on the relay would be
+  the stricter alternative. The page lives under a route like /relay in the
+  app and renders the latest event.
+
 ## Ideas, not decided
 
 - Remove `misc/chaucer.jpg` (a watermarked stock image; the about dialog uses
@@ -64,3 +75,13 @@
 - Editing a place's other OpenStreetMap details (opening hours, phone…), stored
   as your own overrides of the fetched data, as the website already is.
 - A Content-Security-Policy header for stede.cc.
+
+## Done since going live (2026-10-18)
+
+- A place's website: stored and editable, filled from OpenStreetMap, then found
+  through the API rather than stored from OSM (2026-10-19, 2026-10-22).
+- Opening hours from OpenStreetMap, with whether the place is open, closing
+  soon or closed right now (2026-10-22, opening_hours.js, loaded on demand).
+- iOS Safari: the map runs behind the floating toolbar, text fields don't zoom
+  the page, and the page stays put when a field is focused.
+- A reason when your position can't be found.
