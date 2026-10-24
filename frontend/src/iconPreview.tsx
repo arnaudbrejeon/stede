@@ -15,6 +15,10 @@ style.textContent = `
   figcaption { font-size: 13px; color: #5d6b7a; margin-bottom: 6px; }
   .samples { display: flex; align-items: center; gap: 18px; }
   .map-bg { display: flex; gap: 10px; padding: 10px; border-radius: 8px; background: #ece8e1; }
+  .designs .variants { display: block; }
+  .designs figure { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-bottom: 12px; }
+  .designs figcaption { width: 72px; margin: 0; font-family: ui-monospace, monospace; }
+  .designs .map-bg { align-items: center; }
 `
 document.head.append(style)
 

@@ -84,8 +84,11 @@ export function AddPlaceSearch({
     getViewRef.current = getView
   }, [getView])
 
+  // Photon's public server is fair-use only: one request per pause in typing
+  // (DEBOUNCE_MS), none for short or whitespace-only edits, and the previous
+  // request is dropped as soon as the query changes.
+  const query = text.trim()
   useEffect(() => {
-    const query = text.trim()
     // Shorter queries just hide the list (see showList); stale results stay unseen.
     if (query.length < MIN_CHARS) return
     const controller = new AbortController()
@@ -107,7 +110,7 @@ export function AddPlaceSearch({
       clearTimeout(timer)
       controller.abort()
     }
-  }, [text])
+  }, [query])
 
   // Keyboard order runs through the nearby group, then elsewhere.
   const results = [...found.nearby, ...found.elsewhere]
@@ -133,7 +136,7 @@ export function AddPlaceSearch({
     }
   }
 
-  const showList = text.trim().length >= MIN_CHARS && status !== 'idle'
+  const showList = query.length >= MIN_CHARS && status !== 'idle'
   const searching = !pin && !picked
 
   return (

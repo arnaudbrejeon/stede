@@ -15,9 +15,9 @@ export function isMarkerImageId(id: string): boolean {
 
 // Sizes in CSS px.
 export const MARKER_RADIUS = 21.75
-const OUTLINE = 4.5 // white edge so the ring reads against any map colour
-const RING = 5.25 // tag-coloured band
-const ICON_SIZE = 19.5
+const OUTLINE = 4.5 // white edge so the colours read against any map colour
+const CORE = 10.5 // white centre holding the icon
+const ICON_SIZE = 15
 
 const ICON_GRID = 24 // place icons are drawn on a 24×24 grid
 // Iron-gall ink, as --ink in index.css (canvas and map layers can't read CSS).
@@ -40,7 +40,9 @@ export function createSearchPinElement(): HTMLElement {
   return pin
 }
 
-// White disc with the icon in the middle, ringed by one equal arc per tag.
+// A pie of the tags' colours, one equal wedge per tag, with the icon on a white
+// core in the middle. (Until 2026-10-24 a thin ring, which read as an outline;
+// see the designs on icons.html.)
 export function drawMarker(id: string, colors: TagColors, pixelRatio: number): ImageData {
   const body = id.slice(PREFIX.length)
   const split = body.indexOf(':')
@@ -57,18 +59,23 @@ export function drawMarker(id: string, colors: TagColors, pixelRatio: number): I
   ctx.arc(c, c, MARKER_RADIUS, 0, Math.PI * 2)
   ctx.fill()
 
-  // Stroke centred on the band between the outline and the white inner disc.
-  const ringRadius = MARKER_RADIUS - OUTLINE - RING / 2
-  ctx.lineWidth = RING
-  const segments = tags.length > 0 ? tags : [''] // untagged: one full grey ring
+  // Wedges from the centre out to the white outline, the first starting at the top.
+  const pieRadius = MARKER_RADIUS - OUTLINE
+  const segments = tags.length > 0 ? tags : [''] // untagged: one full grey disc
   const step = (Math.PI * 2) / segments.length
   segments.forEach((tag, i) => {
     const start = -Math.PI / 2 + i * step
-    ctx.strokeStyle = tagColor(colors, tag)
+    ctx.fillStyle = tagColor(colors, tag)
     ctx.beginPath()
-    ctx.arc(c, c, ringRadius, start, start + step)
-    ctx.stroke()
+    ctx.moveTo(c, c)
+    ctx.arc(c, c, pieRadius, start, start + step)
+    ctx.closePath()
+    ctx.fill()
   })
+  ctx.fillStyle = '#fff'
+  ctx.beginPath()
+  ctx.arc(c, c, CORE, 0, Math.PI * 2)
+  ctx.fill()
 
   const scale = ICON_SIZE / ICON_GRID
   ctx.translate(c - ICON_SIZE / 2, c - ICON_SIZE / 2)
