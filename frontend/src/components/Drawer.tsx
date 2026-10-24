@@ -10,8 +10,9 @@ type DrawerProps = {
   ref?: Ref<HTMLElement>
 }
 
-// A page over the whole screen on small portrait screens, a panel sliding in
-// from the right otherwise; the placement is handled entirely in CSS.
+// A sheet rising from the bottom on small portrait screens, or a page over the
+// whole screen when there is typing to do; a panel sliding in from the right
+// otherwise. The placement is handled entirely in CSS, from the content.
 export function Drawer({ open, onClose, label, variant, children, ref }: DrawerProps) {
   const asideRef = useRef<HTMLElement | null>(null)
   const setAside = useCallback(
@@ -59,6 +60,7 @@ export function Drawer({ open, onClose, label, variant, children, ref }: DrawerP
       aria-hidden={!open}
       inert={!open}
     >
+      <div className="drawer-handle" aria-hidden="true" />
       <button type="button" className="drawer-close" aria-label="Close" onClick={onClose}>
         ×
       </button>

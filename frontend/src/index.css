@@ -606,28 +606,66 @@ body,
   transition: transform var(--drawer-duration) ease;
 }
 
-/* Small portrait screens: the drawer is a screen of its own over the map and
-   the header, like a page pushed over them, the close button (pinned, top
-   right) as the way back. It is as tall as the visible area (--visible-height,
-   from useHiddenBottom), which the on-screen keyboard shrinks, so it always
-   ends above the keyboard and scrolls within itself. */
+/* Small portrait screens: a place opens in a sheet rising from the bottom,
+   the map above it. The sheet runs down behind whatever covers the bottom
+   (toolbar, home indicator) and its body is padded by that much, so its
+   content always ends just above them and stays below the header. */
 @media (orientation: portrait) and (max-width: 640px) {
   .drawer {
+    top: auto;
+    left: 0;
+    width: auto;
+    max-height: calc(min(60vh, var(--visible-height, 100dvh) - 72px) + var(--covered-bottom));
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    border-radius: 14px 14px 0 0;
+    box-shadow: 0 -4px 16px rgba(var(--shadow), 0.12);
+    transform: translateY(100%);
+  }
+  .drawer-handle {
+    display: block;
+    width: 36px;
+    height: 4px;
+    margin: 8px auto 0;
+    border-radius: 2px;
+    background: var(--line);
+  }
+  /* A short banner, so the name and details stay in view; cropped to fill it. */
+  .result-image {
+    aspect-ratio: auto;
+    height: clamp(96px, 20vh, 150px);
+  }
+
+  /* Typing (your key, editing a place, adding one): the drawer is a screen of
+     its own over the map and the header, like a page pushed over them, the
+     close button (pinned, top right) as the way back. A sheet would meet the
+     on-screen keyboard rising from the same edge; the page is as tall as the
+     visible area (--visible-height, from useHiddenBottom), which the keyboard
+     shrinks, so it always ends above it and scrolls within itself. */
+  .drawer:has(.key-panel, .place-editor, .add-search) {
     position: fixed;
     inset: 0 0 auto;
-    width: auto;
     height: var(--visible-height, 100dvh);
+    max-height: none;
     z-index: 4;
     border: 0;
+    border-radius: 0;
     box-shadow: none;
   }
-  .drawer-close {
+  .drawer:has(.key-panel, .place-editor, .add-search) .drawer-handle {
+    display: none;
+  }
+  .drawer:has(.key-panel, .place-editor, .add-search) .drawer-close {
     position: fixed;
     z-index: 2;
   }
-  .drawer-body {
+  .drawer:has(.key-panel, .place-editor, .add-search) .drawer-body {
     /* Ends above the browser's bars: nothing covers its end. */
     padding-bottom: 24px;
+  }
+  .drawer:has(.key-panel, .place-editor, .add-search) .result-image {
+    aspect-ratio: 16 / 9;
+    height: auto;
   }
 
   /* Adding a place: the search is a picker, the field pinned along the top
@@ -730,6 +768,11 @@ body,
   .app {
     --drawer-duration: 0ms;
   }
+}
+
+/* The phone sheet's grip (see the portrait rules). */
+.drawer-handle {
+  display: none;
 }
 
 .drawer-close {
