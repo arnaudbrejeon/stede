@@ -25,8 +25,10 @@
   `uv export` of backend/, and Trivy on the relay image (its base, Alpine
   3.18, is end of life, so `apk upgrade` in relay/Dockerfile is all it gets
   until strfry's image moves on). The 2026-10-24 audit found vite, certifi
-  and OpenSSL/musl behind. Either a weekly reminder, or GitHub's Dependabot
-  for npm and uv, which opens pull requests by itself.
+  and OpenSSL/musl behind; all three are fixed in the repository, but the
+  relay's fix is not deployed yet (`deploy/deploy.sh relay`, a short
+  restart). Either a weekly reminder, or GitHub's Dependabot for npm and uv,
+  which opens pull requests by itself.
 
 ## Later
 
@@ -75,6 +77,14 @@
 - Editing a place's other OpenStreetMap details (opening hours, phone…), stored
   as your own overrides of the fetched data, as the website already is.
 - A Content-Security-Policy header for stede.cc.
+- The pie marker (2026-10-24) may go back to a ring if the smaller icon
+  reads badly on busy maps; the designs are compared on icons.html.
+- A street-level picture of a place: Mapillary's open imagery through the
+  API (cacheable, CC BY-SA), or just a "Look around" link opening Apple or
+  Google Maps at the spot. Apple's Look Around can't be captured from a web
+  app, and its imagery may not be stored.
+- On phones the full-screen page hides the map's zoom, locate and map-type
+  buttons while it is open; they could move to the bottom right.
 
 ## Done since going live (2026-10-18)
 
@@ -85,3 +95,14 @@
 - iOS Safari: the map runs behind the floating toolbar, text fields don't zoom
   the page, and the page stays put when a field is focused.
 - A reason when your position can't be found.
+- Phones (2026-10-24): a place's details stay in the bottom sheet, but your
+  key, editing a place and adding one open as a page over the whole screen,
+  as tall as what the keyboard leaves, a focused field brought to the top.
+  Adding a place: the search field pinned at the top, a row to drop a pin
+  instead, which closes the page onto the map until the tap.
+- Markers (2026-10-24): the tags' colours as a pie around the icon on a
+  white core, instead of the thin ring.
+- Adding a place: a result you already have is ticked and opens that place,
+  the map flying to it (2026-10-24). Repeated searches answered from caches.
+- Dependencies (2026-10-24): vite, certifi and the relay's Alpine packages
+  taken past their advisories.
