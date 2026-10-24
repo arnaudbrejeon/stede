@@ -26,6 +26,9 @@ type AddPlaceSearchProps = {
   pin: LngLat | null
   onClearPin: () => void
   onSaved: (place: Place) => void
+  // Chosen to drop a pin rather than search (shown on phones, where the map is
+  // behind the drawer).
+  onPinInstead: () => void
   allLabels: readonly string[]
   tagColors: TagColors
 }
@@ -40,7 +43,8 @@ const GROUPS = [
 
 // Drawer content for finding a new place: a search field with the results listed
 // below it, or a pin dropped on the map. Arrow keys move through results, Enter
-// picks one.
+// picks one. On phones the drawer covers the map (see index.css), so dropping
+// a pin is offered as a row: it closes the drawer until the map is tapped.
 export function AddPlaceSearch({
   getView,
   onPick,
@@ -48,6 +52,7 @@ export function AddPlaceSearch({
   pin,
   onClearPin,
   onSaved,
+  onPinInstead,
   allLabels,
   tagColors,
 }: AddPlaceSearchProps) {
@@ -67,14 +72,13 @@ export function AddPlaceSearch({
     if (pin) setPicked(null)
   }
 
-  // Ready to type with a physical keyboard. On touch screens focusing would pop
-  // up the on-screen keyboard over the sheet, so there you tap the field first.
+  // Ready to type as it opens; on phones that brings up the keyboard under the
+  // search. Not when it opens on a dropped pin: that shows the pin's details.
   // Focus without scrolling: the drawer is still sliding in, and a plain focus
   // (or autoFocus) can scroll its container to reveal the field, shifting the map.
   useEffect(() => {
-    if (window.matchMedia('(hover: none) and (pointer: coarse)').matches) return
-    inputRef.current?.focus({ preventScroll: true })
-  }, [])
+    if (!pin) inputRef.current?.focus({ preventScroll: true })
+  }, [pin])
 
   useEffect(() => {
     getViewRef.current = getView
@@ -130,28 +134,31 @@ export function AddPlaceSearch({
   }
 
   const showList = text.trim().length >= MIN_CHARS && status !== 'idle'
+  const searching = !pin && !picked
 
   return (
-    <div className="add-search">
+    <div className={`add-search${searching ? ' searching' : ''}`}>
       <h2>Add a place</h2>
-      <input
-        type="search"
-        ref={inputRef}
-        role="combobox"
-        placeholder="Search an address or place"
-        aria-label="Search an address or place"
-        aria-autocomplete="list"
-        aria-expanded={showList}
-        aria-controls={listId}
-        aria-activedescendant={showList && active >= 0 ? `${listId}-${active}` : undefined}
-        value={text}
-        onChange={(e) => {
-          setText(e.target.value)
-          setPicked(null)
-          onClearPin()
-        }}
-        onKeyDown={onKeyDown}
-      />
+      <div className="search-bar">
+        <input
+          type="search"
+          ref={inputRef}
+          role="combobox"
+          placeholder="Search an address or place"
+          aria-label="Search an address or place"
+          aria-autocomplete="list"
+          aria-expanded={showList}
+          aria-controls={listId}
+          aria-activedescendant={showList && active >= 0 ? `${listId}-${active}` : undefined}
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value)
+            setPicked(null)
+            onClearPin()
+          }}
+          onKeyDown={onKeyDown}
+        />
+      </div>
       {pin ? (
         <PinDetails
           point={pin}
@@ -176,7 +183,7 @@ export function AddPlaceSearch({
           }}
         />
       ) : !showList ? (
-        <p className="search-note">Or tap the map to drop a pin.</p>
+        <p className="search-note search-hint">Or tap the map to drop a pin.</p>
       ) : (
         <div className="search-results" id={listId} role="listbox" aria-label="Search results">
           {status === 'loading' && !results.length && <p className="search-note">Searching…</p>}
@@ -216,6 +223,11 @@ export function AddPlaceSearch({
             </div>
           ))}
         </div>
+      )}
+      {searching && (
+        <button type="button" className="pin-instead" onClick={onPinInstead}>
+          Drop a pin on the map instead
+        </button>
       )}
     </div>
   )

@@ -68,6 +68,10 @@ body,
 .search-results {
   margin: 8px -20px 0;
 }
+/* Phones only: the search screen's way to a pin (see .add-search.searching). */
+.pin-instead {
+  display: none;
+}
 .search-group {
   padding: 12px 20px 4px;
   font-size: 11px;
@@ -107,14 +111,6 @@ body,
   overflow: hidden;
   border-radius: 8px;
   background: var(--hover);
-}
-/* Bottom sheet: a short banner, so the name and details stay in view. The image
-   is cropped to fill it (object-fit: cover). */
-@media (orientation: portrait) and (max-width: 640px) {
-  .result-image {
-    aspect-ratio: auto;
-    height: clamp(96px, 20vh, 150px);
-  }
 }
 .result-image.loading {
   animation: pulse 1.2s ease-in-out infinite;
@@ -610,21 +606,73 @@ body,
   transition: transform var(--drawer-duration) ease;
 }
 
-/* Small portrait screens: bottom sheet */
+/* Small portrait screens: the drawer is a screen of its own over the map and
+   the header, like a page pushed over them, the close button (pinned, top
+   right) as the way back. It is as tall as the visible area (--visible-height,
+   from useHiddenBottom), which the on-screen keyboard shrinks, so it always
+   ends above the keyboard and scrolls within itself. */
 @media (orientation: portrait) and (max-width: 640px) {
   .drawer {
-    top: auto;
-    left: 0;
+    position: fixed;
+    inset: 0 0 auto;
     width: auto;
-    /* The sheet runs down behind whatever covers the bottom (toolbar, keyboard)
-       and its body is padded by that much, so it grows by it too: its content
-       always ends just above the keyboard and stays below the header. */
-    max-height: calc(min(60vh, var(--visible-height, 100dvh) - 72px) + var(--covered-bottom));
-    border-left: 0;
+    height: var(--visible-height, 100dvh);
+    z-index: 4;
+    border: 0;
+    box-shadow: none;
+  }
+  .drawer-close {
+    position: fixed;
+    z-index: 2;
+  }
+  .drawer-body {
+    /* Ends above the browser's bars: nothing covers its end. */
+    padding-bottom: 24px;
+  }
+
+  /* Adding a place: the search is a picker, the field pinned along the top
+     under the close button, the results below it, the keyboard up (the field
+     is focused as it opens). The map being covered, dropping a pin is offered
+     as a row, which closes the drawer onto the map (see App.tsx). */
+  .add-search.searching h2,
+  .add-search.searching .search-hint {
+    display: none;
+  }
+  .drawer:has(.add-search.searching) .drawer-body {
+    padding: 0;
+  }
+  .add-search.searching .search-bar {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 8px 48px 8px 12px;
+    background: var(--action-panel);
+    border-bottom: 1px solid var(--line);
+  }
+  .add-search.searching .search-results {
+    margin: 0;
+    padding-bottom: 8px;
+  }
+  .add-search.searching .pin-instead {
+    display: block;
+    width: 100%;
+    padding: 14px 20px;
+    font: inherit;
+    font-size: 15px;
+    text-align: left;
+    color: var(--action);
+    background: none;
+    border: 0;
     border-top: 1px solid var(--line);
-    border-radius: 14px 14px 0 0;
-    box-shadow: 0 -4px 16px rgba(var(--shadow), 0.12);
-    transform: translateY(100%);
+    cursor: pointer;
+  }
+}
+
+/* Touch screens: a focused field is brought to the top of the drawer
+   (Drawer.tsx); room below the content lets even the last one get there. */
+@media (pointer: coarse) {
+  .drawer:has(:is(.field, label) > :is(input, textarea):focus) .drawer-body {
+    padding-bottom: var(--visible-height, 100dvh);
   }
 }
 
@@ -681,20 +729,6 @@ body,
 @media (prefers-reduced-motion: reduce) {
   .app {
     --drawer-duration: 0ms;
-  }
-}
-
-.drawer-handle {
-  display: none;
-}
-@media (orientation: portrait) and (max-width: 640px) {
-  .drawer-handle {
-    display: block;
-    width: 36px;
-    height: 4px;
-    margin: 8px auto 0;
-    border-radius: 2px;
-    background: var(--line);
   }
 }
 
@@ -1024,7 +1058,8 @@ body,
 .place-editor h2 {
   margin: 0 36px 4px 0;
 }
-.places-error {
+.places-error,
+.map-hint {
   position: absolute;
   z-index: 3;
   top: 12px;
@@ -1039,6 +1074,23 @@ body,
   box-shadow: 0 2px 12px rgba(var(--shadow), 0.2);
   width: max-content;
   max-width: min(480px, calc(100% - 32px));
+}
+/* Waiting for a tap to drop a pin, the drawer closed to show the map (phones). */
+.map-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--action);
+}
+.map-hint button {
+  padding: 0;
+  font: inherit;
+  font-size: 20px;
+  line-height: 1;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
 }
 
 .places-data {

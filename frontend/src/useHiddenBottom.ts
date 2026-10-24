@@ -3,7 +3,8 @@ import { useEffect, type RefObject } from 'react'
 // Tracks how much of the element's bottom the browser hides: its toolbar, the
 // home indicator, or the on-screen keyboard. Phones don't move the page for the
 // keyboard, they only shrink the visible area (the visual viewport), so this is
-// the one way to keep a bottom sheet's content above it. Sets on the element:
+// the one way to keep the controls along the bottom, and the end of the phone
+// sheet, above it. Sets on the element:
 //   --screen-height   px of the screen's height (phones make the app this tall)
 //   --hidden-bottom   px of the element below the visible area
 //   --visible-height  px of the visible area

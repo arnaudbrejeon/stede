@@ -25,6 +25,8 @@ function App() {
   const [searching, setSearching] = useState(false)
   // A spot picked on the map while adding a place, instead of searching.
   const [pin, setPin] = useState<LngLat | null>(null)
+  // On phones the drawer covers the map: to drop a pin it closes until the tap.
+  const [pinning, setPinning] = useState(false)
   // The drawer shows the user's key instead of a place.
   const [showingKey, setShowingKey] = useState(false)
   // Adding a place needs the key: '+' asks for it first, then carries on.
@@ -52,11 +54,12 @@ function App() {
   const selected = searching || showingKey
     ? null
     : (filtered.features.find((f) => f.properties.id === selectedId) ?? null)
-  const drawerOpen = showingKey || searching || selected !== null
+  const drawerOpen = showingKey || (searching && !pinning) || selected !== null
 
   const showKey = () => {
     setSelectedId(null)
     setSearching(false)
+    setPinning(false)
     setPin(null)
     mapRef.current?.clearLocation()
     setAddAfterUnlock(false)
@@ -83,6 +86,7 @@ function App() {
     setShowingKey(false)
     setAddAfterUnlock(false)
     setSearching(false)
+    setPinning(false)
     setPin(null)
     mapRef.current?.clearLocation()
   }, [])
@@ -91,6 +95,7 @@ function App() {
   const selectOnMap = useCallback((id: string | null) => {
     if (id === null) return setSelectedId(null)
     setSearching(false)
+    setPinning(false)
     setShowingKey(false)
     setAddAfterUnlock(false)
     setPin(null)
@@ -101,11 +106,13 @@ function App() {
   const dropPin = useCallback((point: LngLat) => {
     mapRef.current?.clearLocation()
     setPin(point)
+    setPinning(false)
   }, [])
   const clearPin = useCallback(() => setPin(null), [])
   // A new place: leave adding and show it.
   const placeSaved = useCallback((place: Place) => {
     setSearching(false)
+    setPinning(false)
     setPin(null)
     mapRef.current?.clearLocation()
     setSelectedId(place.properties.id)
@@ -142,6 +149,14 @@ function App() {
         {locateError && !placesError && (
           <p className="places-error" role="alert" onClick={() => setLocateError(null)}>
             {locateError}
+          </p>
+        )}
+        {pinning && (
+          <p className="map-hint" role="status">
+            Tap the map to drop a pin.
+            <button type="button" aria-label="Cancel" onClick={() => setPinning(false)}>
+              ×
+            </button>
           </p>
         )}
         {!searching && (
@@ -184,6 +199,7 @@ function App() {
               pin={pin}
               onClearPin={clearPin}
               onSaved={placeSaved}
+              onPinInstead={() => setPinning(true)}
               allLabels={tags}
               tagColors={tagColors}
             />

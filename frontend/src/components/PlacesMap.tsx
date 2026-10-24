@@ -114,7 +114,7 @@ export function PlacesMap({
       // cameraForBounds rather than fitBounds: fitBounds' padding would persist on the map.
       const camera = extent
         ? map.cameraForBounds([extent[0], extent[3], extent[2], extent[1]], {
-            padding: { top: 60, left: 60, right: 60 + inset.right, bottom: 60 + inset.bottom },
+            padding: { top: 60, left: 60, right: 60 + inset.right, bottom: 60 },
             maxZoom: 17,
           })
         : undefined
@@ -423,7 +423,7 @@ function addLayers(map: maplibregl.Map, ink: PlaceInk) {
   })
 }
 
-type Inset = { right: number; bottom: number }
+type Inset = { right: number }
 
 // Why your position couldn't be found, and what to do about it.
 // Codes as in GeolocationPositionError: 1 denied, 2 unavailable, 3 timeout.
@@ -440,22 +440,20 @@ function locateErrorMessage({ code }: { code: number }): string {
   return 'Your position isn’t available right now.'
 }
 
-// How much of the map a panel docked to the right or bottom edge covers. Uses
-// layout offsets rather than the bounding box so it's correct while the panel is
-// still sliding in.
-// The part behind the browser's bars is already the map's bottom padding (see
-// padForBars), so it isn't counted again.
+// How much of the map the drawer covers, docked to the right edge. Uses layout
+// offsets rather than the bounding box so it's correct while the drawer is
+// still sliding in. On phones the drawer covers the whole map (see index.css):
+// nothing is left to centre in, so no inset.
 function overlayInset(map: maplibregl.Map, overlay: HTMLElement | null | undefined): Inset {
-  if (!overlay) return { right: 0, bottom: 0 }
-  const { clientWidth: w, clientHeight: h } = map.getContainer()
-  const spansHeight = overlay.offsetTop <= 0 && overlay.offsetHeight >= h
-  if (spansHeight) return { right: Math.max(0, w - overlay.offsetLeft), bottom: 0 }
-  return { right: 0, bottom: Math.max(0, h - overlay.offsetTop - (map.getPadding().bottom ?? 0)) }
+  if (!overlay) return { right: 0 }
+  const w = map.getContainer().clientWidth
+  if (overlay.offsetWidth >= w) return { right: 0 }
+  return { right: Math.max(0, w - overlay.offsetLeft) }
 }
 
 // Shift that centres a point in the area left visible beside the inset.
-function insetOffset({ right, bottom }: Inset): [number, number] {
-  return [-right / 2, -bottom / 2]
+function insetOffset({ right }: Inset): [number, number] {
+  return [-right / 2, 0]
 }
 
 function selectedFilter(id: string | null): maplibregl.FilterSpecification {
