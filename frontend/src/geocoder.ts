@@ -150,6 +150,11 @@ function streetLine(p: PhotonProperties): string | undefined {
   return p.housenumber ? `${p.housenumber} ${p.street}` : p.street
 }
 
+// One string for an OpenStreetMap element, e.g. "N123" (type as Photon gives it).
+export function osmRef(type: string, id: number): string {
+  return `${type}${id}`
+}
+
 export function resultKey(r: GeocodeResult): string {
-  return `${r.properties.osm_type}${r.properties.osm_id}`
+  return osmRef(r.properties.osm_type, r.properties.osm_id)
 }

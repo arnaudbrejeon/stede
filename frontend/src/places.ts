@@ -1,5 +1,6 @@
 import type { Feature, FeatureCollection, Point } from 'geojson'
 import type { PlaceIconKey } from './placeIcons'
+import { osmRef } from './geocoder'
 import { DEFAULT_TAGS } from './tags'
 
 export type PlaceProperties = {
@@ -53,4 +54,15 @@ export function allTags(places: Places): string[] {
   const used = new Set(places.features.flatMap((f) => f.properties.tags))
   const builtIn = DEFAULT_TAGS.filter((t) => used.has(t))
   return [...builtIn, ...[...used].filter((t) => !DEFAULT_TAGS.includes(t)).sort()]
+}
+
+// The id of the place saved for each OpenStreetMap element (see osmRef), so a
+// search result can be told from one you already have.
+export function placeIdsByOsm(places: Places): ReadonlyMap<string, string> {
+  const ids = new Map<string, string>()
+  for (const f of places.features) {
+    const { osm_type, osm_id, id } = f.properties
+    if (osm_type && osm_id !== undefined) ids.set(osmRef(osm_type, osm_id), id)
+  }
+  return ids
 }

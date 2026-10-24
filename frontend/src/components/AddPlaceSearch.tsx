@@ -29,6 +29,10 @@ type AddPlaceSearchProps = {
   // Chosen to drop a pin rather than search (shown on phones, where the map is
   // behind the drawer).
   onPinInstead: () => void
+  // Your places by OpenStreetMap element (placeIdsByOsm): a result you already
+  // have is ticked, and opens that place rather than a new one.
+  savedIds: ReadonlyMap<string, string>
+  onOpenSaved: (id: string) => void
   allLabels: readonly string[]
   tagColors: TagColors
 }
@@ -53,6 +57,8 @@ export function AddPlaceSearch({
   onClearPin,
   onSaved,
   onPinInstead,
+  savedIds,
+  onOpenSaved,
   allLabels,
   tagColors,
 }: AddPlaceSearchProps) {
@@ -119,6 +125,8 @@ export function AddPlaceSearch({
   const split = groups.length > 1
 
   const pick = (result: GeocodeResult) => {
+    const saved = savedIds.get(resultKey(result))
+    if (saved) return onOpenSaved(saved)
     setPicked(result)
     onPick(result)
   }
@@ -205,13 +213,14 @@ export function AddPlaceSearch({
               )}
               {group.items.map((r) => {
                 const i = results.indexOf(r)
+                const saved = savedIds.has(resultKey(r))
                 return (
                   <div
                     key={resultKey(r)}
                     id={`${listId}-${i}`}
                     role="option"
                     aria-selected={i === active}
-                    className="search-result"
+                    className={`search-result${saved ? ' saved' : ''}`}
                     onMouseEnter={() => {
                       setActive(i)
                       onPreview(r)
@@ -220,6 +229,11 @@ export function AddPlaceSearch({
                   >
                     <span className="search-title">{resultTitle(r.properties)}</span>
                     <span className="search-subtitle">{resultSubtitle(r.properties)}</span>
+                    {saved && (
+                      <svg className="search-saved" viewBox="0 0 20 20" role="img" aria-label="Already in your places">
+                        <path d="M4 10.5l4 4 8-9" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
                   </div>
                 )
               })}

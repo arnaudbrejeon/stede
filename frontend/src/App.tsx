@@ -13,6 +13,7 @@ import { withWelcome } from './welcomePlace'
 import { allTags, filterPlaces, type Place, type TagLine } from './places'
 import { buildTagColors } from './tags'
 import { useHiddenBottom } from './useHiddenBottom'
+import { placeIdsByOsm } from './places'
 
 function App() {
   // Your places from the relay, once the key is unlocked (see placeStore.ts).
@@ -45,6 +46,7 @@ function App() {
   useHiddenBottom(appRef)
 
   const tags = useMemo(() => allTags(places), [places])
+  const savedIds = useMemo(() => placeIdsByOsm(places), [places])
   const tagColors = useMemo(() => buildTagColors(tags), [tags])
   const filtered = useMemo(
     () => filterPlaces(places, query, tagLines),
@@ -200,6 +202,8 @@ function App() {
               onClearPin={clearPin}
               onSaved={placeSaved}
               onPinInstead={() => setPinning(true)}
+              savedIds={savedIds}
+              onOpenSaved={selectOnMap}
               allLabels={tags}
               tagColors={tagColors}
             />
