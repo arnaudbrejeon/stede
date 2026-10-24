@@ -29,11 +29,18 @@ export type PlacesMapHandle = {
 // [longitude, latitude]
 export type LngLat = [number, number]
 
+// Close enough to see a place's surroundings when the map is brought to it.
+export const PLACE_ZOOM = 16
+
 type PlacesMapProps = {
   ref?: Ref<PlacesMapHandle>
   places: Places
   selectedId: string | null
   onSelect: (id: string | null) => void
+  // Zoom in to at least this when the selection changes. Selecting on the map
+  // keeps the zoom; opening a place from elsewhere (a search result you already
+  // have) brings the map to it.
+  selectZoom?: number
   // Opening saves the view; closing restores it.
   drawerOpen: boolean
   tagColors: TagColors
@@ -53,6 +60,7 @@ export function PlacesMap({
   places,
   selectedId,
   onSelect,
+  selectZoom,
   drawerOpen,
   tagColors,
   overlayRef,
@@ -65,6 +73,8 @@ export function PlacesMap({
   // Latest props, so handlers registered once on the map never see stale values.
   const placesRef = useRef(places)
   const selectedIdRef = useRef(selectedId)
+  const selectZoomRef = useRef(selectZoom)
+  selectZoomRef.current = selectZoom
   // The base map shown, which decides how the place layers are drawn.
   const mapTypeRef = useRef<MapType>(savedMapType())
   const onSelectRef = useRef(onSelect)
@@ -119,7 +129,7 @@ export function PlacesMap({
           })
         : undefined
       if (camera) map.flyTo({ center: camera.center, zoom: camera.zoom })
-      else map.flyTo({ center, zoom: Math.max(map.getZoom(), 16), offset: insetOffset(inset) })
+      else map.flyTo({ center, zoom: Math.max(map.getZoom(), PLACE_ZOOM), offset: insetOffset(inset) })
     },
     clearLocation: () => locationMarkerRef.current?.remove(),
   }))
@@ -312,11 +322,14 @@ export function PlacesMap({
     if (!map || selectedId === null) return
     const place = placesRef.current.features.find((f) => f.properties.id === selectedId)
     if (!place) return
-    map.easeTo({
+    const view = {
       center: place.geometry.coordinates as [number, number],
       // An offset rather than padding: map padding persists and would skew zooming later.
       offset: insetOffset(overlayInset(map, overlayRef?.current)),
-    })
+    }
+    const zoom = selectZoomRef.current
+    if (zoom === undefined) map.easeTo(view)
+    else map.flyTo({ ...view, zoom: Math.max(map.getZoom(), zoom) })
     // Only a new selection should move the map, not later data or ref changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId])

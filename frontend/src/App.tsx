@@ -5,7 +5,7 @@ import { FilterPanel } from './components/FilterPanel'
 import { Header } from './components/Header'
 import { KeyPanel } from './components/KeyPanel'
 import { PlaceDetails } from './components/PlaceDetails'
-import { PlacesMap, type LngLat, type PlacesMapHandle } from './components/PlacesMap'
+import { PlacesMap, PLACE_ZOOM, type LngLat, type PlacesMapHandle } from './components/PlacesMap'
 import type { GeocodeResult } from './geocoder'
 import { useKey } from './keystore'
 import { usePlaces } from './placeStore'
@@ -22,6 +22,8 @@ function App() {
   const [query, setQuery] = useState('')
   const [tagLines, setTagLines] = useState<TagLine[]>([new Set()])
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  // Whether selecting the place should also zoom the map in (see PlacesMap).
+  const [selectZoom, setSelectZoom] = useState<number>()
   // Browsing your places is the default; searching for a new one is opt-in.
   const [searching, setSearching] = useState(false)
   // A spot picked on the map while adding a place, instead of searching.
@@ -94,7 +96,7 @@ function App() {
   }, [])
   // Clicking a place leaves search for its details; clicking empty map while
   // searching keeps the search open, since that's usually looking around.
-  const selectOnMap = useCallback((id: string | null) => {
+  const selectOnMap = useCallback((id: string | null, zoom?: number) => {
     if (id === null) return setSelectedId(null)
     setSearching(false)
     setPinning(false)
@@ -102,6 +104,7 @@ function App() {
     setAddAfterUnlock(false)
     setPin(null)
     mapRef.current?.clearLocation()
+    setSelectZoom(zoom)
     setSelectedId(id)
   }, [])
   // One marker at a time: a dropped pin replaces the search result's, and back.
@@ -139,6 +142,7 @@ function App() {
           places={filtered}
           selectedId={selected?.properties.id ?? null}
           onSelect={selectOnMap}
+          selectZoom={selectZoom}
           drawerOpen={drawerOpen}
           tagColors={tagColors}
           overlayRef={drawerRef}
@@ -203,7 +207,7 @@ function App() {
               onSaved={placeSaved}
               onPinInstead={() => setPinning(true)}
               savedIds={savedIds}
-              onOpenSaved={selectOnMap}
+              onOpenSaved={(id) => selectOnMap(id, PLACE_ZOOM)}
               allLabels={tags}
               tagColors={tagColors}
             />
