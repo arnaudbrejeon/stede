@@ -921,6 +921,32 @@ body,
 }
 
 .save-place,
+/* The place in Apple Maps and Google Maps: two quiet buttons in a row. */
+.map-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0 0;
+}
+.drawer-body a.map-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px 7px 10px;
+  font-size: 14px;
+  color: var(--ink);
+  text-decoration: none;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.drawer-body a.map-link:hover {
+  background: var(--hover);
+}
+.drawer-body a.map-link:focus-visible {
+  outline: 2px solid var(--rubric);
+  outline-offset: 2px;
+}
 .place-actions {
   display: flex;
   flex-direction: column;

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { appleMapsUrl, googleMapsUrl } from '../mapLinks'
 import { draftFromPlace, type UserFields } from '../placeEvents'
 import type { Place } from '../places'
 import type { PlaceWebsite } from '../placeWebsite'
@@ -79,6 +80,7 @@ export function PlaceDetails({ place, tagColors, allLabels, onDeleted }: PlaceDe
         own={p.website}
         where={{ lngLat: coordinates }}
       />
+      <MapLinks lngLat={coordinates} name={p.name} />
       {p.builtin ? (
         <p className="builtin-note">
           Stede’s first place, until you have your own: tap + to add one.
@@ -185,5 +187,32 @@ function PlaceEditor({ place, foundWebsite, tagColors, allLabels, onDone }: Plac
       </div>
       {error && <p className="key-error">{error}</p>}
     </div>
+  )
+}
+
+// The place in other maps, opened in a new tab (on a phone, the maps app).
+function MapLinks({ lngLat, name }: { lngLat: [number, number]; name: string }) {
+  const links = [
+    { label: 'Apple Maps', href: appleMapsUrl(lngLat, name) },
+    { label: 'Google Maps', href: googleMapsUrl(lngLat) },
+  ]
+  return (
+    <p className="map-links">
+      {links.map((l) => (
+        <a key={l.label} className="map-link" href={l.href} target="_blank" rel="noopener">
+          <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+            <path
+              d="M10 2.5a5 5 0 0 0-5 5c0 3.6 5 9.5 5 9.5s5-5.9 5-9.5a5 5 0 0 0-5-5Z"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinejoin="round"
+            />
+            <circle cx="10" cy="7.5" r="1.8" fill="currentColor" />
+          </svg>
+          {l.label}
+        </a>
+      ))}
+    </p>
   )
 }
