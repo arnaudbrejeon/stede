@@ -4,6 +4,7 @@
 |---|---|---|
 | `https://stede.cc` | the app | Cloudflare Workers static assets (`frontend/wrangler.jsonc`) |
 | `https://stede.cc/api/*` | the API: place search, addresses, photos | the same Cloudflare Worker (`frontend/worker/`) |
+| `https://stede.cc/stats` | the relay's figures, counted by the relay (NIP-45) | the same static assets (`frontend/stats.html`) |
 | `wss://relay.stede.cc` | the Nostr relay (strfry) | Google Cloud VM, through a Cloudflare Tunnel |
 
 The relay is an ordinary public relay: any Nostr app can read from it, and any
@@ -83,13 +84,16 @@ deploy/deploy.sh app     # app and API: built with VITE_RELAY_URL=wss://relay.st
 Add the pubkey (64-character hex, `nak decode npub1…` gives it) to
 `relay/authors.txt`, commit, and `deploy/deploy.sh relay`. strfry reads the
 file when it starts, and the deploy restarts it when the file changed. With an
-empty or missing file, nobody can write.
+empty or missing file, nobody can write. Then `deploy/deploy.sh app` as well:
+the stats page lists the authors from the same file, read when the app is
+built.
 
 ## Checking
 
 ```sh
 curl -H 'Accept: application/nostr+json' https://relay.stede.cc   # the relay's NIP-11 description
 curl https://stede.cc/api/health
+open https://stede.cc/stats                                        # how many places and authors the relay holds
 gcloud compute ssh stede --zone us-central1-a --command 'cd stede && docker compose -f deploy/compose.yml logs --tail 50'
 ```
 

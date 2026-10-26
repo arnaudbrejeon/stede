@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react'
 import type { NostrEvent } from 'nostr-tools'
 import { AbstractSimplePool } from 'nostr-tools/abstract-pool'
 import { SimplePool } from 'nostr-tools/pool'
+import { RELAY_URL } from './relayUrl'
 import { getKeyState, getNostr, subscribeKey } from './keystore'
 import { reconcile } from './negentropy'
 import { clearCache, lockCache, readCache, writeCache, type CachedPlace } from './placeCache'
@@ -35,11 +36,6 @@ import {
 // (negentropy.ts), falling back to loading everything when the relay can't
 // sync that way. Only new places are decrypted one by one, shown as they come.
 
-// Served through the dev server (/relay, see vite.config.ts), so the app reaches
-// the relay on the same origin, over wss:// when the page is HTTPS.
-const RELAY_URL =
-  import.meta.env.VITE_RELAY_URL ??
-  `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/relay`
 // The relay's maxFilterLimit: larger collections load in pages.
 const PAGE_SIZE = 500
 // While decrypting, the map is updated at most this often.

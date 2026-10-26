@@ -55,19 +55,6 @@
   so its holidays count as ordinary days. Store the code (or the country) on
   save.
 
-- **A page in stede showing the relay's database.** Total events, number of
-  pubkeys, a histogram of events per pubkey, by kind, and the size of the
-  database on disk, so growth and abuse show up before the VM's 30 GB disk
-  does. The API on Cloudflare can't see the VM, so the figures come from the
-  relay side: a job next to the relay (cron on the VM, `strfry scan` or
-  `strfry export | jq`, `du` on strfry-db/) publishes them regularly as an
-  event the relay itself serves, say a replaceable kind 30078 signed by a
-  relay key. For the page only to be readable with my key: encrypt the
-  content with NIP-44 to my pubkey, as private places already are, so the
-  event is public but the numbers are not; NIP-42 AUTH on the relay would be
-  the stricter alternative. The page lives under a route like /relay in the
-  app and renders the latest event.
-
 ## Ideas, not decided
 
 - Remove `misc/chaucer.jpg` (a watermarked stock image; the about dialog uses
@@ -84,6 +71,10 @@
   app, and its imagery may not be stored.
 - On phones the full-screen page hides the map's zoom, locate and map-type
   buttons while it is open; they could move to the bottom right.
+- The relay database's size on disk, which the stats page can't ask the
+  relay for: a job on the VM (`du` on strfry-db/) publishing it as an event
+  the relay serves, if the event count ever stops being a good enough proxy
+  (about 1.1 kB an event, so 30 GB is some 25 million places).
 
 ## Done since going live (2026-10-18)
 
@@ -105,3 +96,8 @@
   the map flying to it (2026-10-24). Repeated searches answered from caches.
 - Dependencies (2026-10-24): vite, certifi and the relay's Alpine packages
   taken past their advisories.
+- A place's details open it in Apple Maps or Google Maps (2026-10-24).
+- The relay's figures at stede.cc/stats (2026-10-25): private places, authors,
+  and a histogram of authors by their number of places, counted by the relay
+  itself through NIP-45 when the page opens, so nothing runs on the VM and
+  nothing is stored. Public, as the counts give nothing away.

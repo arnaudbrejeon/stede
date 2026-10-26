@@ -36,10 +36,18 @@ function api(): Plugin {
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
   plugins: [react(), api(), ...(mode === 'lan' && !trustedCert ? [basicSsl()] : [])],
+  // The relay's stats page (stats.html) lists the authors the relay accepts, from
+  // the relay's own file: deploy the app again when it changes.
+  define: {
+    __RELAY_AUTHORS_TXT__: JSON.stringify(
+      readFileSync(new URL('../relay/authors.txt', import.meta.url), 'utf8'),
+    ),
+  },
   build: {
     rollupOptions: {
-      // icons.html, palette.html and brand.html are dev-only previews; ship just the app.
-      input: 'index.html',
+      // icons.html, palette.html and brand.html are dev-only previews; ship the
+      // app and the relay's stats page.
+      input: ['index.html', 'stats.html'],
     },
   },
   worker: {

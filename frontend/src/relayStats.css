@@ -1,0 +1,144 @@
+/* The relay's stats page (stats.html): a column of text on the app's vellum,
+   using the app's palette and type from index.css. */
+html,
+body,
+#root {
+  height: auto;
+  min-height: 100%;
+}
+.stats {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 0 max(16px, env(safe-area-inset-right)) 48px max(16px, env(safe-area-inset-left));
+}
+.stats-header {
+  display: flex;
+  align-items: center;
+  height: 52px;
+  margin-bottom: 24px;
+}
+.stats-header .brand {
+  text-decoration: none;
+}
+.stats h1 {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 400;
+  line-height: 1.1;
+  color: var(--brand);
+}
+.stats h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+.stats-lead,
+.stats-note {
+  margin: 0 0 24px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.stats-note {
+  font-size: 14px;
+}
+.stats-error {
+  margin: 0 0 20px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--rubric) 10%, var(--panel));
+  color: var(--rubric);
+}
+.stats-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 32px;
+}
+.stat {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.stat strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.stat span {
+  font-size: 14px;
+  color: var(--muted);
+}
+.stats-spread {
+  margin-bottom: 20px;
+}
+
+/* The histogram: a row a bucket, the label at the left, the bar from a common
+   baseline, the count after it; bars in ink, an empty bucket a sliver of line. */
+.histogram {
+  display: grid;
+  grid-template-columns: max-content 1fr 3ch;
+  column-gap: 10px;
+  row-gap: 6px;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.histogram li {
+  display: contents;
+}
+.histogram-label {
+  font-size: 13px;
+  color: var(--muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.histogram-track {
+  display: block;
+  height: 18px;
+  border-left: 1px solid var(--line);
+}
+.histogram-bar {
+  display: block;
+  width: calc(var(--share) * 100%);
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  background: var(--ink);
+}
+.histogram li.empty .histogram-bar {
+  width: 2px;
+  background: var(--line);
+  border-radius: 0;
+}
+.histogram-value {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.histogram li.empty .histogram-value {
+  color: var(--muted);
+}
+.stats-foot {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.stats-foot button {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.stats-foot button:hover:not(:disabled) {
+  background: var(--hover);
+}
+.stats-foot button:disabled {
+  color: var(--muted);
+  cursor: default;
+}
