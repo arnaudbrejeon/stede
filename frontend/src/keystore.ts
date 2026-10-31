@@ -2,17 +2,31 @@ import { useSyncExternalStore } from 'react'
 import { getPublicKey } from 'nostr-tools'
 import * as nip19 from 'nostr-tools/nip19'
 import * as nip49 from 'nostr-tools/nip49'
+import {
+  createPasskey,
+  forgetPasskey,
+  unlockingKey,
+  type PasskeyRecord,
+} from './passkey'
 import { asNostr, findExtension, localNostr, type Nostr } from './signer'
 
 // The user's Nostr key, kept in this browser.
 //
-// localStorage holds only the NIP-49 encryption of the key (ncryptsec) and its
-// public key, so a copy of the browser's storage needs the password to be any use.
-// The password unlocks the key once per browser session: the unlocked key is
+// localStorage holds only the key encrypted, and its public key, so a copy of
+// the browser's storage is no use without Face ID (or Touch ID, a fingerprint…)
+// or the password. A passkey wraps one copy with a secret only it gives back
+// (passkey.ts); a password encrypts another with NIP-49 (ncryptsec). Either or
+// both: the passkey first where the browser can make one, the password as a
+// backup, or instead. Without either, only the nsec brings the key back.
+//
+// Unlocking happens once per browser session: the unlocked key is
 // kept in memory, and, so a reload or a new tab doesn't ask again, also in
 // sessionStorage wrapped with a non-extractable AES key from IndexedDB. Locking
 // deletes that AES key, which makes every tab's wrapped copy useless. Tabs
 // opened later ask the open ones for their wrapped copy over a BroadcastChannel.
+//
+// Phones close an app they aren't showing, which ends its browser session:
+// there the passkey spares typing a password over and over.
 //
 // localStorage is only readable by this origin, but anything running on it
 // can read the unlocked key, so the app must not load untrusted scripts.
@@ -24,7 +38,7 @@ import { asNostr, findExtension, localNostr, type Nostr } from './signer'
 // second on a laptop and still bearable on a phone, once per browser session.
 const SCRYPT_LOG_N = 17
 
-const STORED = 'stede.key' // localStorage: {pubkey, ncryptsec}
+const STORED = 'stede.key' // localStorage: {pubkey, ncryptsec?, passkey?}, at least one
 const EXTENSION = 'stede.extension' // localStorage: the extension's pubkey
 const SESSION = 'stede.session' // sessionStorage: the key wrapped with the session key
 const DB_NAME = 'stede-keystore'
@@ -37,18 +51,33 @@ const SHARE_TIMEOUT_MS = 300
 export type KeyStatus = 'loading' | 'none' | 'locked' | 'unlocked'
 // Where the key is: in this browser, encrypted with a password, or in an extension.
 export type KeyKind = 'local' | 'extension'
-export type KeyState = { status: KeyStatus; pubkey: string | null; kind: KeyKind | null }
+// `passkey`, `password`: what unlocks the key kept here.
+export type KeyState = {
+  status: KeyStatus
+  pubkey: string | null
+  kind: KeyKind | null
+  passkey: boolean
+  password: boolean
+}
 
-const NO_KEY: KeyState = { status: 'none', pubkey: null, kind: null }
+const NO_KEY: KeyState = {
+  status: 'none',
+  pubkey: null,
+  kind: null,
+  passkey: false,
+  password: false,
+}
 
-type Stored = { pubkey: string; ncryptsec: string }
+type Stored = { pubkey: string; ncryptsec?: string; passkey?: PasskeyRecord }
 type Message = { type: 'request' } | { type: 'share'; wrapped: string } | { type: 'lock' }
 
-let state: KeyState = { status: 'loading', pubkey: null, kind: null }
+let state: KeyState = { ...NO_KEY, status: 'loading' }
 let secretKey: Uint8Array | null = null
 let nostr: Nostr | null = null
 // This tab's wrapped copy, shared with tabs opened later.
 let wrappedKey: string | null = null
+// The passkey prompt being shown, so a second ask waits for it instead.
+let passkeyUnlock: Promise<void> | null = null
 const listeners = new Set<() => void>()
 const channel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(CHANNEL)
 
@@ -90,18 +119,31 @@ export async function initKey(): Promise<KeyState> {
     return state
   }
   const wrapped = sessionStorage.getItem(SESSION) ?? (await askOtherTabs())
-  const key = wrapped ? await unwrap(wrapped) : null
+  const sessionKey = wrapped ? await loadSessionKey() : null
+  const key = sessionKey ? await unwrap(wrapped!, sessionKey) : null
   if (key && getPublicKey(key) === stored.pubkey) {
     sessionStorage.setItem(SESSION, wrapped!)
     secretKey = key
     nostr = localNostr(key)
     wrappedKey = wrapped
-    setState({ status: 'unlocked', pubkey: stored.pubkey, kind: 'local' })
+    setState(localState('unlocked', stored))
   } else {
     sessionStorage.removeItem(SESSION)
-    setState({ status: 'locked', pubkey: stored.pubkey, kind: 'local' })
+    setState(localState('locked', stored))
   }
   return state
+}
+
+// At start, a locked key with a passkey asks for it straight away, so opening
+// the app is one glance at Face ID. Some browsers (Safari) only show the prompt
+// after a tap: then it stays locked, and the unlock panel offers the passkey.
+export async function unlockAtStart(): Promise<void> {
+  if (state.status !== 'locked' || !state.passkey) return
+  try {
+    await unlockWithPasskey()
+  } catch (error) {
+    console.info('Passkey unlock at start didn’t happen', error)
+  }
 }
 
 // Uses a NIP-07 extension's key instead of one kept here.
@@ -112,7 +154,7 @@ export async function connectExtension(): Promise<void> {
   const pubkey = await usable.getPublicKey()
   nostr = usable
   localStorage.setItem(EXTENSION, pubkey)
-  setState({ status: 'unlocked', pubkey, kind: 'extension' })
+  setState({ ...NO_KEY, status: 'unlocked', pubkey, kind: 'extension' })
 }
 
 // Stops using the extension; a key kept here (if any) is offered again.
@@ -120,7 +162,7 @@ export function disconnectExtension(): void {
   localStorage.removeItem(EXTENSION)
   nostr = null
   const stored = readStored()
-  setState(stored ? { status: 'locked', pubkey: stored.pubkey, kind: 'local' } : NO_KEY)
+  setState(stored ? localState('locked', stored) : NO_KEY)
 }
 
 async function reconnectExtension(pubkey: string) {
@@ -132,11 +174,11 @@ async function reconnectExtension(pubkey: string) {
     const current = await usable.getPublicKey()
     nostr = usable
     localStorage.setItem(EXTENSION, current)
-    setState({ status: 'unlocked', pubkey: current, kind: 'extension' })
+    setState({ ...NO_KEY, status: 'unlocked', pubkey: current, kind: 'extension' })
   } catch (error) {
     console.warn('Nostr extension unavailable', error)
     nostr = null
-    setState({ status: 'locked', pubkey, kind: 'extension' })
+    setState({ ...NO_KEY, status: 'locked', pubkey, kind: 'extension' })
   }
 }
 
@@ -156,13 +198,25 @@ export async function importKey(nsec: string, password: string): Promise<void> {
     pubkey: getPublicKey(key),
     ncryptsec: nip49.encrypt(key, password, SCRYPT_LOG_N),
   }
-  localStorage.setItem(STORED, JSON.stringify(stored))
-  await startSession(key, stored.pubkey)
+  writeStored(stored)
+  await startSession(key, stored)
+}
+
+// Stores the user's own key (nsec, or 64 hex characters) unlocked by a new
+// passkey: Face ID, Touch ID or a fingerprint, no password.
+export async function importKeyWithPasskey(nsec: string): Promise<void> {
+  const key = parseSecretKey(nsec)
+  const pubkey = getPublicKey(key)
+  const { wrappingKey, ...passkey } = await createPasskey(pubkey)
+  const stored: Stored = { pubkey, passkey: { ...passkey, wrapped: await wrap(key, wrappingKey) } }
+  writeStored(stored)
+  await startSession(key, stored)
 }
 
 export async function unlock(password: string): Promise<void> {
   const stored = readStored()
   if (!stored) throw new Error('No key is stored in this browser.')
+  if (!stored.ncryptsec) throw new Error('No password unlocks this key.')
   let key: Uint8Array
   try {
     key = nip49.decrypt(stored.ncryptsec, password)
@@ -170,7 +224,56 @@ export async function unlock(password: string): Promise<void> {
     throw new Error('Wrong password.')
   }
   if (getPublicKey(key) !== stored.pubkey) throw new Error('Wrong password.')
-  await startSession(key, stored.pubkey)
+  await startSession(key, stored)
+}
+
+export function unlockWithPasskey(): Promise<void> {
+  passkeyUnlock ??= (async () => {
+    const stored = readStored()
+    if (!stored?.passkey) throw new Error('No passkey unlocks this key.')
+    const unwrapped = await unwrap(stored.passkey.wrapped, await unlockingKey(stored.passkey))
+    if (!unwrapped || getPublicKey(unwrapped) !== stored.pubkey)
+      throw new Error('This passkey doesn’t unlock your key. Use your password.')
+    await startSession(unwrapped, stored)
+  })().finally(() => (passkeyUnlock = null))
+  return passkeyUnlock
+}
+
+// Makes a passkey that unlocks the key from now on; the key must be unlocked.
+export async function addPasskey(): Promise<void> {
+  const stored = readStored()
+  if (!stored || !secretKey) throw new Error('Unlock your key first.')
+  const { wrappingKey, ...passkey } = await createPasskey(stored.pubkey)
+  const wrapped = await wrap(secretKey, wrappingKey)
+  if (stored.passkey && stored.passkey.credentialId !== passkey.credentialId)
+    forgetPasskey(stored.passkey.credentialId)
+  const next = { ...stored, passkey: { ...passkey, wrapped } }
+  writeStored(next)
+  setState(localState(state.status, next))
+}
+
+// A password that unlocks the key too, as a backup for the passkey; the key
+// must be unlocked.
+export async function addPassword(password: string): Promise<void> {
+  checkPassword(password)
+  const stored = readStored()
+  if (!stored || !secretKey) throw new Error('Unlock your key first.')
+  const next = { ...stored, ncryptsec: nip49.encrypt(secretKey, password, SCRYPT_LOG_N) }
+  writeStored(next)
+  setState(localState(state.status, next))
+}
+
+// Back to the password only. The passkey stays in the password manager, which
+// may offer to delete it.
+export function removePasskey(): void {
+  const stored = readStored()
+  if (!stored?.passkey) return
+  if (!stored.ncryptsec) throw new Error('Add a password first: nothing else would unlock your key.')
+  forgetPasskey(stored.passkey.credentialId)
+  const rest: Stored = { ...stored }
+  delete rest.passkey
+  writeStored(rest)
+  setState(localState(state.status, rest))
 }
 
 // Locks every tab; the password is needed again.
@@ -183,6 +286,8 @@ export async function lock(): Promise<void> {
 // Removes the key from this browser. The user needs their nsec to add it again.
 export async function forgetKey(): Promise<void> {
   await lock()
+  const passkey = readStored()?.passkey
+  if (passkey) forgetPasskey(passkey.credentialId)
   localStorage.removeItem(STORED)
   setState(NO_KEY)
 }
@@ -207,19 +312,34 @@ export function checkPassword(password: string): void {
 function readStored(): Stored | null {
   try {
     const value = JSON.parse(localStorage.getItem(STORED) ?? 'null')
-    return typeof value?.pubkey === 'string' && typeof value?.ncryptsec === 'string' ? value : null
+    const unlockable = typeof value?.ncryptsec === 'string' || typeof value?.passkey === 'object'
+    return typeof value?.pubkey === 'string' && unlockable ? value : null
   } catch {
     return null
   }
 }
 
-async function startSession(key: Uint8Array, pubkey: string) {
+function writeStored(stored: Stored) {
+  localStorage.setItem(STORED, JSON.stringify(stored))
+}
+
+function localState(status: KeyStatus, stored: Stored): KeyState {
+  return {
+    status,
+    pubkey: stored.pubkey,
+    kind: 'local',
+    passkey: !!stored.passkey,
+    password: !!stored.ncryptsec,
+  }
+}
+
+async function startSession(key: Uint8Array, stored: Stored) {
   const sessionKey = (await loadSessionKey()) ?? (await createSessionKey())
   wrappedKey = await wrap(key, sessionKey)
   sessionStorage.setItem(SESSION, wrappedKey)
   secretKey = key
   nostr = localNostr(key)
-  setState({ status: 'unlocked', pubkey, kind: 'local' })
+  setState(localState('unlocked', stored))
 }
 
 function dropSession() {
@@ -231,7 +351,7 @@ function dropSession() {
   nostr = null
   wrappedKey = null
   const stored = readStored()
-  setState(stored ? { status: 'locked', pubkey: stored.pubkey, kind: 'local' } : NO_KEY)
+  setState(stored ? localState('locked', stored) : NO_KEY)
 }
 
 channel?.addEventListener('message', (event: MessageEvent<Message>) => {
@@ -262,11 +382,12 @@ function askOtherTabs(): Promise<string | null> {
   })
 }
 
-// The wrapped key is base64(12-byte IV + AES-GCM ciphertext).
-async function wrap(key: Uint8Array, sessionKey: CryptoKey): Promise<string> {
+// The wrapped key is base64(12-byte IV + AES-GCM ciphertext), wrapped with the
+// session key or the passkey's.
+async function wrap(key: Uint8Array, wrappingKey: CryptoKey): Promise<string> {
   const iv = crypto.getRandomValues(new Uint8Array(12))
   const sealed = new Uint8Array(
-    await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, sessionKey, key as BufferSource),
+    await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, wrappingKey, key as BufferSource),
   )
   const out = new Uint8Array(iv.length + sealed.length)
   out.set(iv)
@@ -274,14 +395,12 @@ async function wrap(key: Uint8Array, sessionKey: CryptoKey): Promise<string> {
   return btoa(String.fromCharCode(...out))
 }
 
-async function unwrap(wrapped: string): Promise<Uint8Array | null> {
-  const sessionKey = await loadSessionKey()
-  if (!sessionKey) return null
+async function unwrap(wrapped: string, wrappingKey: CryptoKey): Promise<Uint8Array | null> {
   try {
     const data = Uint8Array.from(atob(wrapped), (c) => c.charCodeAt(0))
     const key = await crypto.subtle.decrypt(
       { name: 'AES-GCM', iv: data.slice(0, 12) },
-      sessionKey,
+      wrappingKey,
       data.slice(12),
     )
     return new Uint8Array(key)
