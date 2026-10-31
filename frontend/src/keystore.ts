@@ -26,7 +26,10 @@ import { asNostr, findExtension, localNostr, type Nostr } from './signer'
 // opened later ask the open ones for their wrapped copy over a BroadcastChannel.
 //
 // Phones close an app they aren't showing, which ends its browser session:
-// there the passkey spares typing a password over and over.
+// there the passkey spares typing a password over and over. Or the installed
+// app can stay unlocked: its wrapped copy then goes in localStorage instead,
+// still useless without the AES key, until Lock deletes that key or the app
+// isn't opened for STAY_UNLOCKED_DAYS.
 //
 // localStorage is only readable by this origin, but anything running on it
 // can read the unlocked key, so the app must not load untrusted scripts.
@@ -41,6 +44,8 @@ const SCRYPT_LOG_N = 17
 const STORED = 'stede.key' // localStorage: {pubkey, ncryptsec?, passkey?}, at least one
 const EXTENSION = 'stede.extension' // localStorage: the extension's pubkey
 const SESSION = 'stede.session' // sessionStorage: the key wrapped with the session key
+const KEPT = 'stede.kept' // localStorage: {wrapped, lastUsed}, the same, staying unlocked
+const STAY_UNLOCKED_DAYS = 30
 const DB_NAME = 'stede-keystore'
 const DB_STORE = 'keys'
 const SESSION_KEY_ID = 'session'
@@ -69,6 +74,9 @@ const NO_KEY: KeyState = {
 }
 
 type Stored = { pubkey: string; ncryptsec?: string; passkey?: PasskeyRecord }
+type Kept = { wrapped: string; lastUsed: number }
+// `stayUnlocked`: past this browser session, on this device (see KEPT).
+export type UnlockOptions = { stayUnlocked?: boolean }
 type Message = { type: 'request' } | { type: 'share'; wrapped: string } | { type: 'lock' }
 
 let state: KeyState = { ...NO_KEY, status: 'loading' }
@@ -76,6 +84,8 @@ let secretKey: Uint8Array | null = null
 let nostr: Nostr | null = null
 // This tab's wrapped copy, shared with tabs opened later.
 let wrappedKey: string | null = null
+// This tab's unlock is kept past the browser session (KEPT).
+let staying = false
 // The passkey prompt being shown, so a second ask waits for it instead.
 let passkeyUnlock: Promise<void> | null = null
 const listeners = new Set<() => void>()
@@ -118,7 +128,8 @@ export async function initKey(): Promise<KeyState> {
     setState(NO_KEY)
     return state
   }
-  const wrapped = sessionStorage.getItem(SESSION) ?? (await askOtherTabs())
+  const wrapped =
+    sessionStorage.getItem(SESSION) ?? readKept()?.wrapped ?? (await askOtherTabs())
   const sessionKey = wrapped ? await loadSessionKey() : null
   const key = sessionKey ? await unwrap(wrapped!, sessionKey) : null
   if (key && getPublicKey(key) === stored.pubkey) {
@@ -126,12 +137,20 @@ export async function initKey(): Promise<KeyState> {
     secretKey = key
     nostr = localNostr(key)
     wrappedKey = wrapped
+    staying = readKept()?.wrapped === wrapped
+    touchKept()
     setState(localState('unlocked', stored))
   } else {
     sessionStorage.removeItem(SESSION)
+    localStorage.removeItem(KEPT)
     setState(localState('locked', stored))
   }
   return state
+}
+
+// Whether the key stays unlocked past this browser session.
+export function staysUnlocked(): boolean {
+  return state.status === 'unlocked' && staying
 }
 
 // At start, a locked key with a passkey asks for it straight away, so opening
@@ -191,7 +210,11 @@ function readExtension(): string | null {
 }
 
 // Stores the user's own key (nsec, or 64 hex characters) encrypted with a new password.
-export async function importKey(nsec: string, password: string): Promise<void> {
+export async function importKey(
+  nsec: string,
+  password: string,
+  options: UnlockOptions = {},
+): Promise<void> {
   const key = parseSecretKey(nsec)
   checkPassword(password)
   const stored: Stored = {
@@ -199,7 +222,7 @@ export async function importKey(nsec: string, password: string): Promise<void> {
     ncryptsec: nip49.encrypt(key, password, SCRYPT_LOG_N),
   }
   writeStored(stored)
-  await startSession(key, stored)
+  await startSession(key, stored, options)
 }
 
 // Stores the user's own key (nsec, or 64 hex characters) unlocked by a new
@@ -213,7 +236,7 @@ export async function importKeyWithPasskey(nsec: string): Promise<void> {
   await startSession(key, stored)
 }
 
-export async function unlock(password: string): Promise<void> {
+export async function unlock(password: string, options: UnlockOptions = {}): Promise<void> {
   const stored = readStored()
   if (!stored) throw new Error('No key is stored in this browser.')
   if (!stored.ncryptsec) throw new Error('No password unlocks this key.')
@@ -224,7 +247,7 @@ export async function unlock(password: string): Promise<void> {
     throw new Error('Wrong password.')
   }
   if (getPublicKey(key) !== stored.pubkey) throw new Error('Wrong password.')
-  await startSession(key, stored)
+  await startSession(key, stored, options)
 }
 
 export function unlockWithPasskey(): Promise<void> {
@@ -333,10 +356,13 @@ function localState(status: KeyStatus, stored: Stored): KeyState {
   }
 }
 
-async function startSession(key: Uint8Array, stored: Stored) {
+async function startSession(key: Uint8Array, stored: Stored, options: UnlockOptions = {}) {
   const sessionKey = (await loadSessionKey()) ?? (await createSessionKey())
   wrappedKey = await wrap(key, sessionKey)
   sessionStorage.setItem(SESSION, wrappedKey)
+  staying = !!options.stayUnlocked
+  if (staying) writeKept({ wrapped: wrappedKey, lastUsed: Date.now() })
+  else localStorage.removeItem(KEPT)
   secretKey = key
   nostr = localNostr(key)
   setState(localState('unlocked', stored))
@@ -344,6 +370,8 @@ async function startSession(key: Uint8Array, stored: Stored) {
 
 function dropSession() {
   sessionStorage.removeItem(SESSION)
+  localStorage.removeItem(KEPT)
+  staying = false
   // The extension isn't locked by this; only a key kept here is.
   if (state.kind === 'extension') return
   secretKey?.fill(0)
@@ -353,6 +381,45 @@ function dropSession() {
   const stored = readStored()
   setState(stored ? localState('locked', stored) : NO_KEY)
 }
+
+// The kept copy, unless the app hasn't been opened for STAY_UNLOCKED_DAYS:
+// then it's dropped, and the key asks to be unlocked again.
+function readKept(): Kept | null {
+  try {
+    const kept = JSON.parse(localStorage.getItem(KEPT) ?? 'null')
+    if (typeof kept?.wrapped !== 'string' || typeof kept?.lastUsed !== 'number') return null
+    if (Date.now() - kept.lastUsed > STAY_UNLOCKED_DAYS * 24 * 60 * 60 * 1000) {
+      localStorage.removeItem(KEPT)
+      return null
+    }
+    return kept
+  } catch {
+    return null
+  }
+}
+
+function writeKept(kept: Kept) {
+  localStorage.setItem(KEPT, JSON.stringify(kept))
+}
+
+// Opening the app counts as using it, also when it comes back from the
+// background without starting again.
+function touchKept() {
+  const kept = readKept()
+  if (kept) writeKept({ ...kept, lastUsed: Date.now() })
+}
+
+// Back from the background: still within STAY_UNLOCKED_DAYS, or locked.
+export function resumeKept(): void {
+  if (!staying || state.status !== 'unlocked') return
+  if (readKept()) touchKept()
+  else void lock()
+}
+
+if (typeof document !== 'undefined')
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') resumeKept()
+  })
 
 channel?.addEventListener('message', (event: MessageEvent<Message>) => {
   const message = event.data

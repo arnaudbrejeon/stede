@@ -931,6 +931,17 @@ body,
   border: 0;
   opacity: 0;
 }
+.key-form label.key-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+}
+.key-form .key-check input {
+  width: auto;
+  margin: 0;
+  padding: 0;
+}
 .key-passkey {
   display: flex;
   flex-direction: column;

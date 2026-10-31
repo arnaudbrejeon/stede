@@ -198,6 +198,78 @@ describe('keystore', () => {
     expect(localStorage.getItem('stede.key')).toBeNull()
   })
 
+  describe('staying unlocked', () => {
+    // The app closed and opened again: a new browser session, no tab to share.
+    async function reopen() {
+      vi.stubGlobal('BroadcastChannel', undefined)
+      return openTab()
+    }
+
+    it('stays unlocked after the app is closed, when asked', async () => {
+      const first = await openTab()
+      await first.keystore.importKey(nsec, PASSWORD, { stayUnlocked: true })
+      expect(first.keystore.staysUnlocked()).toBe(true)
+      const later = await reopen()
+      expect((await later.keystore.initKey()).status).toBe('unlocked')
+      expect(later.keystore.staysUnlocked()).toBe(true)
+      await expect(later.keystore.getNostr()?.getPublicKey()).resolves.toBe(pubkey)
+      expect(localStorage.getItem('stede.kept')).not.toContain(bytesToHex(sk))
+    })
+
+    it('asks again after the app is closed, when not asked', async () => {
+      const first = await openTab()
+      await first.keystore.importKey(nsec, PASSWORD)
+      expect(first.keystore.staysUnlocked()).toBe(false)
+      const later = await reopen()
+      expect((await later.keystore.initKey()).status).toBe('locked')
+    })
+
+    it('unlocking without staying drops a kept unlock', async () => {
+      const first = await openTab()
+      await first.keystore.importKey(nsec, PASSWORD, { stayUnlocked: true })
+      await first.keystore.unlock(PASSWORD)
+      expect(localStorage.getItem('stede.kept')).toBeNull()
+    })
+
+    it('locking ends it', async () => {
+      const first = await openTab()
+      await first.keystore.importKey(nsec, PASSWORD, { stayUnlocked: true })
+      await first.keystore.lock()
+      expect(localStorage.getItem('stede.kept')).toBeNull()
+      const later = await reopen()
+      expect((await later.keystore.initKey()).status).toBe('locked')
+    })
+
+    it('ends after 30 days without opening the app', async () => {
+      const first = await openTab()
+      await first.keystore.importKey(nsec, PASSWORD, { stayUnlocked: true })
+      const kept = JSON.parse(localStorage.getItem('stede.kept')!)
+      const daysAgo = (days: number) => Date.now() - days * 24 * 60 * 60 * 1000
+      localStorage.setItem('stede.kept', JSON.stringify({ ...kept, lastUsed: daysAgo(29) }))
+      const soon = await reopen()
+      expect((await soon.keystore.initKey()).status).toBe('unlocked')
+      // Opening it counted as using it.
+      expect(JSON.parse(localStorage.getItem('stede.kept')!).lastUsed).toBeGreaterThan(daysAgo(1))
+
+      localStorage.setItem('stede.kept', JSON.stringify({ ...kept, lastUsed: daysAgo(31) }))
+      const late = await reopen()
+      expect((await late.keystore.initKey()).status).toBe('locked')
+      expect(localStorage.getItem('stede.kept')).toBeNull()
+    })
+
+    it('locks an app back from 30 days in the background', async () => {
+      const first = await openTab()
+      await first.keystore.importKey(nsec, PASSWORD, { stayUnlocked: true })
+      first.keystore.resumeKept()
+      expect(first.keystore.getKeyState().status).toBe('unlocked')
+      const kept = JSON.parse(localStorage.getItem('stede.kept')!)
+      const longAgo = Date.now() - 31 * 24 * 60 * 60 * 1000
+      localStorage.setItem('stede.kept', JSON.stringify({ ...kept, lastUsed: longAgo }))
+      first.keystore.resumeKept()
+      await vi.waitFor(() => expect(first.keystore.getKeyState().status).toBe('locked'))
+    })
+  })
+
   describe('passkey', () => {
     // An unlocked key with a passkey, then the browser session ends.
     async function withPasskey() {

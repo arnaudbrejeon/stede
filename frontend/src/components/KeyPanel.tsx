@@ -14,6 +14,7 @@ import {
   lock,
   parseSecretKey,
   removePasskey,
+  staysUnlocked,
   unlock,
   unlockWithPasskey,
   useKey,
@@ -68,6 +69,7 @@ function AddKey() {
   const [withPassword, setWithPassword] = useState(!canUsePasskey)
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
+  const [stay, setStay] = useState(installedApp)
   const { busy, error, run } = useAction()
 
   const submit = (e: FormEvent) => {
@@ -76,7 +78,7 @@ function AddKey() {
       run(async () => {
         checkPassword(password)
         if (password !== confirm) throw new Error('The passwords don’t match.')
-        await importKey(nsec, password)
+        await importKey(nsec, password, { stayUnlocked: stay })
       })
     else
       run(
@@ -127,6 +129,7 @@ function AddKey() {
             onPassword={setPassword}
             onConfirm={setConfirm}
           />
+          <StayUnlocked checked={stay} onChange={setStay} />
         </>
       )}
       {error && <p className="key-error">{error}</p>}
@@ -223,11 +226,12 @@ function PasskeyUnlock({ pubkey, password }: { pubkey: string; password: boolean
 // a phone would open its keyboard over the Face ID prompt.
 function PasswordUnlock({ pubkey, passkey }: { pubkey: string; passkey: boolean }) {
   const [password, setPassword] = useState('')
+  const [stay, setStay] = useState(installedApp)
   const { busy, error, run } = useAction()
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    run(() => unlock(password))
+    run(() => unlock(password, { stayUnlocked: stay }))
   }
 
   return (
@@ -252,6 +256,7 @@ function PasswordUnlock({ pubkey, passkey }: { pubkey: string; passkey: boolean 
           required
         />
       </label>
+      <StayUnlocked checked={stay} onChange={setStay} />
       {error && <p className="key-error">{error}</p>}
       <button type="submit" className="key-button" disabled={busy}>
         {busy ? 'Unlocking…' : 'Unlock'}
@@ -265,7 +270,11 @@ function Unlocked({ pubkey, passkey, password }: UnlockProps) {
   return (
     <div className="key-form">
       <Npub pubkey={pubkey} />
-      <p className="key-note">Unlocked until you close the browser or lock it.</p>
+      <p className="key-note">
+        {staysUnlocked()
+          ? 'Unlocked on this device until you lock it, or don’t open Stede for 30 days.'
+          : 'Unlocked until you close the browser or lock it.'}
+      </p>
       <button type="button" className="key-button" onClick={() => void lock()}>
         Lock
       </button>
@@ -423,6 +432,31 @@ function AddPassword({ pubkey }: { pubkey: string }) {
         {busy ? 'Encrypting…' : 'Add password'}
       </button>
     </form>
+  )
+}
+
+// Stede opened from the home screen, as an app: there the OS ends the
+// browser session whenever it closes the app, so the key can stay unlocked.
+// In a browser tab, it's unlocked for the browser session only.
+function isInstalledApp(): boolean {
+  if (typeof window === 'undefined') return false
+  const iosHomeScreen = (navigator as { standalone?: boolean }).standalone === true
+  return iosHomeScreen || window.matchMedia?.('(display-mode: standalone)').matches === true
+}
+
+const installedApp = isInstalledApp()
+
+function StayUnlocked(props: { checked: boolean; onChange: (checked: boolean) => void }) {
+  if (!installedApp) return null
+  return (
+    <label className="key-check">
+      <input
+        type="checkbox"
+        checked={props.checked}
+        onChange={(e) => props.onChange(e.target.checked)}
+      />
+      Stay unlocked on this device
+    </label>
   )
 }
 
