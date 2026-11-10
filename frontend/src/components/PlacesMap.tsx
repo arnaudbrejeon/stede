@@ -13,6 +13,7 @@ import {
 import { placeIcon } from '../placeIconChoice'
 import type { Places } from '../places'
 import type { TagColors } from '../tags'
+import { SETTLE_MS, ViewHistory, type View } from '../viewHistory'
 
 const SOURCE_ID = 'places'
 
@@ -24,6 +25,9 @@ export type PlacesMapHandle = {
   // Pan to a result without zooming, e.g. while hovering it in a list.
   previewLocation: (result: GeocodeResult) => void
   clearLocation: () => void
+  // Step through the views the map has rested on (see viewHistory).
+  goBack: () => void
+  goForward: () => void
 }
 
 // [longitude, latitude]
@@ -53,6 +57,8 @@ type PlacesMapProps = {
   pin?: LngLat | null
   // Told why your position couldn't be found, after a tap on the locate button.
   onLocateError?: (message: string) => void
+  // Told whether there are views to step back and forward to, as that changes.
+  onHistoryChange?: (canGoBack: boolean, canGoForward: boolean) => void
 }
 
 export function PlacesMap({
@@ -67,6 +73,7 @@ export function PlacesMap({
   onPinDrop,
   pin = null,
   onLocateError,
+  onHistoryChange,
 }: PlacesMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
@@ -87,6 +94,21 @@ export function PlacesMap({
   const locationMarkerRef = useRef<maplibregl.Marker | null>(null)
   const onPinDropRef = useRef(onPinDrop)
   const pinMarkerRef = useRef<maplibregl.Marker | null>(null)
+  const onHistoryChangeRef = useRef(onHistoryChange)
+  const historyRef = useRef<ViewHistory>(null)
+  historyRef.current ??= new ViewHistory()
+
+  const reportHistory = (map: maplibregl.Map) => {
+    const history = historyRef.current!
+    onHistoryChangeRef.current?.(history.canGoBack(currentView(map), viewReach(map)), history.canGoForward())
+  }
+  const showView = (map: maplibregl.Map, view: View | undefined) => {
+    if (!view) return
+    // Closing the drawer shouldn't then undo the step.
+    viewBeforeDrawerRef.current = null
+    map.flyTo(view)
+    reportHistory(map)
+  }
 
   const placeLocationMarker = (map: maplibregl.Map, center: [number, number]) => {
     locationMarkerRef.current ??= new maplibregl.Marker({ element: createSearchPinElement() })
@@ -132,6 +154,14 @@ export function PlacesMap({
       else map.flyTo({ center, zoom: Math.max(map.getZoom(), PLACE_ZOOM), offset: insetOffset(inset) })
     },
     clearLocation: () => locationMarkerRef.current?.remove(),
+    goBack: () => {
+      const map = mapRef.current
+      if (map) showView(map, historyRef.current!.back(currentView(map), viewReach(map)))
+    },
+    goForward: () => {
+      const map = mapRef.current
+      if (map) showView(map, historyRef.current!.forward())
+    },
   }))
 
   useEffect(() => {
@@ -283,12 +313,38 @@ export function PlacesMap({
       if (e.originalEvent) viewBeforeDrawerRef.current = null
     })
 
+    // A view the map rests on for a while goes into the history, unless it's
+    // still around the last one (see viewReach). Stepping through the history
+    // lands on a view already there, which isn't added again.
+    let settleTimer: ReturnType<typeof setTimeout> | undefined
+    const awaitSettle = () => {
+      clearTimeout(settleTimer)
+      settleTimer = setTimeout(() => {
+        historyRef.current!.record(currentView(map), viewReach(map))
+        reportHistory(map)
+      }, SETTLE_MS)
+    }
+    map.on('movestart', (e) => {
+      clearTimeout(settleTimer)
+      // The view you start from counts even if you leave it straight away, so
+      // there's always a way back to it.
+      const history = historyRef.current!
+      if (e.originalEvent && history.isEmpty) history.record(currentView(map), viewReach(map))
+    })
+    map.on('moveend', () => {
+      awaitSettle()
+      // Back is there as soon as you've left the last view rested on.
+      reportHistory(map)
+    })
+    awaitSettle()
+
     for (const layer of ['clusters', 'place-points']) {
       map.on('mouseenter', layer, () => (map.getCanvas().style.cursor = 'pointer'))
       map.on('mouseleave', layer, () => (map.getCanvas().style.cursor = ''))
     }
 
     return () => {
+      clearTimeout(settleTimer)
       window.removeEventListener('resize', padForBars)
       map.remove()
       mapRef.current = null
@@ -360,9 +416,10 @@ export function PlacesMap({
   useEffect(() => {
     onSelectRef.current = onSelect
     onLocateErrorRef.current = onLocateError
+    onHistoryChangeRef.current = onHistoryChange
     // Markers already drawn keep their colours; tag colours are fixed for the session.
     tagColorsRef.current = tagColors
-  }, [onSelect, onLocateError, tagColors])
+  }, [onSelect, onLocateError, onHistoryChange, tagColors])
 
   return <div ref={containerRef} className="map" />
 }
@@ -434,6 +491,18 @@ function addLayers(map: maplibregl.Map, ink: PlaceInk) {
     },
     paint: { 'text-color': ink.label, 'text-halo-color': ink.halo, 'text-halo-width': 1.5 },
   })
+}
+
+function currentView(map: maplibregl.Map): View {
+  const { lng, lat } = map.getCenter()
+  return { center: [lng, lat], zoom: map.getZoom() }
+}
+
+// How far the map can move and still be looking at the same area, for the
+// history: half the screen, so the old centre is still in sight.
+function viewReach(map: maplibregl.Map): number {
+  const { clientWidth, clientHeight } = map.getContainer()
+  return Math.min(clientWidth, clientHeight) / 2
 }
 
 type Inset = { right: number; bottom: number }

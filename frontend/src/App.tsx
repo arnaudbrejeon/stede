@@ -42,6 +42,13 @@ function App() {
     const timer = setTimeout(() => setLocateError(null), 12_000)
     return () => clearTimeout(timer)
   }, [locateError])
+  // Whether the map has earlier and later views to step to (see viewHistory).
+  const [canGoBack, setCanGoBack] = useState(false)
+  const [canGoForward, setCanGoForward] = useState(false)
+  const noteHistory = useCallback((back: boolean, forward: boolean) => {
+    setCanGoBack(back)
+    setCanGoForward(forward)
+  }, [])
   const appRef = useRef<HTMLDivElement>(null)
   const drawerRef = useRef<HTMLElement>(null)
   const mapRef = useRef<PlacesMapHandle>(null)
@@ -149,6 +156,7 @@ function App() {
           onPinDrop={searching ? dropPin : undefined}
           pin={pin}
           onLocateError={setLocateError}
+          onHistoryChange={noteHistory}
         />
         {/* Filters are for browsing your places; out of the way while adding one. */}
         {placesError && <p className="places-error">{placesError}</p>}
@@ -175,19 +183,45 @@ function App() {
             tagColors={tagColors}
           />
         )}
-        {!searching && (
+        <div className="map-actions">
           <button
             type="button"
-            className="add-place"
-            aria-label="Add a place"
-            title="Add a place"
-            onClick={openSearch}
+            className="map-step"
+            aria-label="Previous map view"
+            title="Previous map view"
+            disabled={!canGoBack}
+            onClick={() => mapRef.current?.goBack()}
           >
-            <svg viewBox="0 0 20 20" width="22" height="22" aria-hidden="true">
-              <path d="M10 3.5v13M3.5 10h13" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+            <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
+              <path d="M12.5 4 6.5 10l6 6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
-        )}
+          {!searching && (
+            <button
+              type="button"
+              className="add-place"
+              aria-label="Add a place"
+              title="Add a place"
+              onClick={openSearch}
+            >
+              <svg viewBox="0 0 20 20" width="22" height="22" aria-hidden="true">
+                <path d="M10 3.5v13M3.5 10h13" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+              </svg>
+            </button>
+          )}
+          <button
+            type="button"
+            className="map-step"
+            aria-label="Next map view"
+            title="Next map view"
+            disabled={!canGoForward}
+            onClick={() => mapRef.current?.goForward()}
+          >
+            <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
+              <path d="m7.5 4 6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
         <Drawer
           ref={drawerRef}
           open={drawerOpen}

@@ -548,7 +548,7 @@ body,
 .app.drawer-open .maplibregl-ctrl-bottom-right {
   right: var(--drawer-width);
 }
-.app.drawer-open .add-place {
+.app.drawer-open .map-actions {
   /* Centred in the map area left beside the side drawer. */
   left: calc((100% - var(--drawer-width)) / 2);
 }
@@ -557,39 +557,66 @@ body,
   .app.drawer-open .maplibregl-ctrl-bottom-right {
     right: 0;
   }
-  .app.drawer-open .add-place {
+  .app.drawer-open .map-actions {
     left: 50%;
   }
 }
 
-.add-place {
+/* Along the bottom of the map: '+' between the steps back and forward through
+   the views the map has rested on. */
+.map-actions {
   position: absolute;
   z-index: 1;
   left: 50%;
   /* Clear of the map attribution along the bottom edge. */
   bottom: 40px;
   transform: translateX(-50%);
-  display: grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  padding: 0;
-  color: #fff;
-  background: var(--action);
-  border: 0;
-  border-radius: 50%;
-  box-shadow: 0 4px 14px rgba(var(--shadow), 0.3);
-  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 14px;
   transition: left var(--drawer-duration) ease;
 }
-/* Narrow screens fold the attribution into its (i) button, so the button can sit
+/* Narrow screens fold the attribution into its (i) button, so the buttons can sit
    low, just above whatever the browser covers. */
 @media (max-width: 640px) {
-  .add-place {
+  .map-actions {
     bottom: calc(var(--covered-bottom) + 20px);
   }
 }
-.add-place:focus-visible {
+.add-place,
+.map-step {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.add-place {
+  width: 52px;
+  height: 52px;
+  color: #fff;
+  background: var(--action);
+  box-shadow: 0 4px 14px rgba(var(--shadow), 0.3);
+}
+.map-step {
+  width: 40px;
+  height: 40px;
+  color: var(--ink);
+  background: var(--panel);
+  box-shadow: 0 2px 10px rgba(var(--shadow), 0.25);
+}
+.map-step:hover {
+  background: var(--hover);
+}
+.map-step:disabled {
+  color: var(--muted);
+  background: var(--panel);
+  opacity: 0.6;
+  cursor: default;
+}
+.add-place:focus-visible,
+.map-step:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
