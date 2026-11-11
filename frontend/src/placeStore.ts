@@ -2,11 +2,11 @@ import { useSyncExternalStore } from 'react'
 import type { NostrEvent } from 'nostr-tools'
 import { AbstractSimplePool } from 'nostr-tools/abstract-pool'
 import { SimplePool } from 'nostr-tools/pool'
-import { RELAY_URL } from './relayUrl'
 import { getKeyState, getNostr, subscribeKey } from './keystore'
 import { reconcile } from './negentropy'
 import { clearCache, lockCache, readCache, writeCache, type CachedPlace } from './placeCache'
 import {
+  DELETION_KIND,
   deletionEvent,
   innerPlace,
   keepUnmanagedTags,
@@ -18,6 +18,7 @@ import {
   type PlaceDraft,
 } from './placeEvents'
 import { NO_PLACES, type Place, type Places } from './places'
+import { getRelays, subscribeRelays } from './relayList'
 import type { Nostr } from './signer'
 import {
   buildPlacesFile,
@@ -27,14 +28,19 @@ import {
   type PlacesFile,
 } from './placesFile'
 
-// Your places, kept on the stede relay as private place events (see
-// placeEvents.ts). They load when the key is unlocked and are dropped when it
-// locks. Saving and deleting update the map at once, then publish.
+// Your places, kept as private place events (see placeEvents.ts) on your
+// relays: the stede relay, or those you chose (relayList.ts). They load when
+// the key is unlocked and are dropped when it locks. Saving and deleting update
+// the map at once, then publish to every relay; it's done once one takes it.
 //
 // Your places are also kept in this browser, encrypted (placeCache.ts): a visit
-// shows those at once, then asks the relay only for what changed
-// (negentropy.ts), falling back to loading everything when the relay can't
+// shows those at once, then asks each relay only for what changed
+// (negentropy.ts), falling back to loading everything from a relay that can't
 // sync that way. Only new places are decrypted one by one, shown as they come.
+//
+// Relays can disagree: one was down when a place was saved, or was just added.
+// Then the deletions on them settle which places are gone, and each relay is
+// sent the places and deletions it's missing (see syncWithRelays).
 
 // The relay's maxFilterLimit: larger collections load in pages.
 const PAGE_SIZE = 500
@@ -59,8 +65,10 @@ export type PlacesState = {
   // decrypted (slow with an extension, which decrypts one at a time).
   loaded: number
   opened: number
-  // Checking with the relay for changes, while showing what this browser holds.
+  // Checking with the relays for changes, while showing what this browser holds.
   syncing: boolean
+  // Places and deletions still to send to relays missing them.
+  copying: number
 }
 
 let state: PlacesState = {
@@ -70,6 +78,7 @@ let state: PlacesState = {
   loaded: 0,
   opened: 0,
   syncing: false,
+  copying: 0,
 }
 const listeners = new Set<() => void>()
 const pool = new SimplePool()
@@ -185,11 +194,22 @@ function onKeyChange() {
       loaded: 0,
       opened: 0,
       syncing: false,
+      copying: 0,
     })
   }
 }
 subscribeKey(onKeyChange)
 onKeyChange()
+
+// A change of relays loads again: from the new ones, and copying your places
+// to those missing them.
+let relaysLoaded = getRelays().relays.join(' ')
+subscribeRelays(() => {
+  const relays = getRelays().relays.join(' ')
+  if (relays === relaysLoaded) return
+  relaysLoaded = relays
+  if (loadedFor) void loadPlaces()
+})
 
 export async function loadPlaces(): Promise<void> {
   const { nostr, pubkey } = requireKey()
@@ -197,7 +217,7 @@ export async function loadPlaces(): Promise<void> {
   records.clear()
   known.clear()
   superseded.clear()
-  setState({ status: 'loading', error: null, loaded: 0, opened: 0, syncing: true })
+  setState({ status: 'loading', error: null, loaded: 0, opened: 0, syncing: true, copying: 0 })
   try {
     const cached = await readCache(pubkey, nostr)
     if (run !== generation) return
@@ -206,26 +226,27 @@ export async function loadPlaces(): Promise<void> {
       showKnown()
       setState({ status: 'ready' })
     }
-    const changed = await syncWithRelay(pubkey, run)
+    const { changed, copies } = await syncWithRelays(pubkey, run)
     if (run !== generation) return
     await openNew(run, nostr)
     if (run !== generation) return
     if (changed || cached.length === 0) showKnown()
     setState({ status: 'ready', syncing: false })
     if (changed || cached.length === 0) saveCacheSoon()
+    await sendCopies(copies, run)
   } catch (error) {
     if (run !== generation) return
     console.error(error)
     if (state.status === 'ready') {
       setState({
         syncing: false,
-        error: 'The relay could not be reached: these are your places as last seen here.',
+        error: 'Your relays could not be reached: these are your places as last seen here.',
       })
     } else {
       setState({
         status: 'error',
         syncing: false,
-        error: 'Your places could not be loaded from the relay.',
+        error: 'Your places could not be loaded from your relays.',
       })
     }
   }
@@ -270,40 +291,158 @@ async function openNew(run: number, nostr: Nostr) {
   setState({ opened })
 }
 
-// Brings `known` in line with the relay; true when anything changed.
-async function syncWithRelay(pubkey: string, run: number): Promise<boolean> {
+// What a relay holds, next to what this browser knows: the known events it
+// lacks, and its events not known here (fetched).
+type RelayHolding = { url: string; lacks: Set<string>; events: NostrEvent[] }
+
+// An event to send to relays missing it.
+type Copy = { event: NostrEvent; to: string[] }
+
+// Brings `known` in line with the relays. Changed: anything was added or
+// dropped. Copies: what to send to relays missing it, once the places show.
+async function syncWithRelays(
+  pubkey: string,
+  run: number,
+): Promise<{ changed: boolean; copies: Copy[] }> {
+  const relays = getRelays().relays
+  const results = await Promise.allSettled(relays.map((url) => readRelay(url, pubkey, run)))
+  const holdings = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []))
+  if (holdings.length === 0) throw (results[0] as PromiseRejectedResult).reason
+  for (const r of results) if (r.status === 'rejected') console.warn('A relay could not be read', r.reason)
+  if (run !== generation) return { changed: false, copies: [] }
+
+  const fetched = new Map<string, NostrEvent>()
+  for (const { events } of holdings)
+    for (const event of events) if (!superseded.has(event.id)) fetched.set(event.id, event)
+  // Which relays (of those reached) hold each event.
+  const holders = new Map<string, string[]>()
+  for (const id of known.keys()) {
+    holders.set(id, holdings.flatMap(({ url, lacks }) => (lacks.has(id) ? [] : [url])))
+  }
+  for (const { url, events } of holdings) {
+    for (const { id } of events) if (fetched.has(id)) holders.set(id, [...(holders.get(id) ?? []), url])
+  }
+  const before = known.size
+  let changed = false
+  for (const [id, event] of fetched) {
+    if (known.has(id)) continue
+    known.set(id, { id, created_at: event.created_at, d: dOf(event), event })
+    changed = true
+  }
+  // Gone from every relay reached: replaced or deleted.
+  for (const [id, on] of holders) if (on.length === 0 && known.delete(id)) changed = true
+  if (holdings.length === 1 || [...holders.values()].every((on) => on.length === holdings.length))
+    return { changed, copies: [] }
+
+  // The relays disagree. Deletions settle which places are gone; of the rest,
+  // each place's newest version is kept, and sent where it's missing, with
+  // the deletions.
+  const deletions = await Promise.all(holdings.map(({ url }) => fetchDeletions(url, pubkey)))
+  if (run !== generation) return { changed: false, copies: [] }
+  const deletedAt = new Map<string, number>()
+  const deletionCopies = new Map<string, Copy>()
+  deletions.forEach((events, i) => {
+    for (const event of events) {
+      for (const [name, value] of event.tags) {
+        const prefix = `${PRIVATE_PLACE_KIND}:${pubkey}:`
+        if (name !== 'a' || !value?.startsWith(prefix)) continue
+        const d = value.slice(prefix.length)
+        deletedAt.set(d, Math.max(deletedAt.get(d) ?? 0, event.created_at))
+      }
+      const copy = deletionCopies.get(event.id) ?? { event, to: holdings.map((h) => h.url) }
+      copy.to = copy.to.filter((url) => url !== holdings[i].url)
+      deletionCopies.set(event.id, copy)
+    }
+  })
+  for (const entry of [...known.values()]) {
+    if (entry.created_at <= (deletedAt.get(entry.d) ?? -1)) {
+      known.delete(entry.id)
+      changed = true
+    }
+  }
+  const newest = new Set(newestByPlace(known.values()).map((entry) => entry.id))
+  for (const id of known.keys()) {
+    if (!newest.has(id)) {
+      known.delete(id)
+      changed = true
+    }
+  }
+  // Each place's newest version, by the relays missing it. Its event is
+  // fetched from a relay that has it, unless it was just fetched.
+  const missing = new Map<string, string[]>()
+  const toFetch = new Map<string, string[]>()
+  const placeCopies: Copy[] = []
+  for (const id of newest) {
+    const on = holders.get(id) ?? []
+    const to = holdings.map((h) => h.url).filter((url) => !on.includes(url))
+    if (to.length === 0) continue
+    missing.set(id, to)
+    const event = fetched.get(id)
+    if (event) placeCopies.push({ event, to })
+    else toFetch.set(on[0], [...(toFetch.get(on[0]) ?? []), id])
+  }
+  for (const [from, ids] of toFetch) {
+    for (const event of await fetchByIds(from, pubkey, ids).catch(() => [])) {
+      placeCopies.push({ event, to: missing.get(event.id)! })
+    }
+  }
+  if (run !== generation) return { changed: false, copies: [] }
+  const copies = [...[...deletionCopies.values()].filter((c) => c.to.length > 0), ...placeCopies]
+  return { changed: changed || known.size !== before, copies }
+}
+
+// What a relay holds of your places, next to what's known here.
+async function readRelay(url: string, pubkey: string, run: number): Promise<RelayHolding> {
   const filter = { kinds: [PRIVATE_PLACE_KIND], authors: [pubkey] }
-  let gone: string[]
-  let fetched: NostrEvent[]
   try {
-    const { have, need } = await reconcile(RELAY_URL, filter, [...known.values()])
-    gone = have
-    fetched = await fetchByIds(pubkey, need)
+    const { have, need } = await reconcile(url, filter, [...known.values()])
+    return { url, lacks: new Set(have), events: await fetchByIds(url, pubkey, need) }
   } catch (error) {
     // No NIP-77 sync: load everything, as without a cache.
-    console.warn('Loading all places: the relay could not sync changes.', error)
-    const all = await fetchAll(pubkey, (loaded) => {
+    console.warn(`Loading all places from ${url}: the relay could not sync changes.`, error)
+    const all = await fetchAll(url, pubkey, (loaded) => {
       if (run === generation) setState({ loaded })
     })
     const onRelay = new Set(all.map((event) => event.id))
-    gone = [...known.keys()].filter((id) => !onRelay.has(id))
-    fetched = all.filter((event) => !known.has(event.id))
+    return {
+      url,
+      lacks: new Set([...known.keys()].filter((id) => !onRelay.has(id))),
+      events: all.filter((event) => !known.has(event.id)),
+    }
   }
-  if (run !== generation) return false
-  fetched = fetched.filter((event) => !superseded.has(event.id))
-  for (const id of gone) known.delete(id)
-  for (const event of fetched) {
-    known.set(event.id, { id: event.id, created_at: event.created_at, d: dOf(event), event })
-  }
-  return gone.length > 0 || fetched.length > 0
 }
 
-// Your private place events with these ids, PAGE_SIZE at a time.
-async function fetchByIds(pubkey: string, ids: string[]): Promise<NostrEvent[]> {
+// Your deletions of private places on a relay.
+function fetchDeletions(url: string, pubkey: string): Promise<NostrEvent[]> {
+  return placesPool
+    .querySync([url], { kinds: [DELETION_KIND], authors: [pubkey], '#k': [String(PRIVATE_PLACE_KIND)] })
+    .catch(() => [])
+}
+
+// Sends each relay the places and deletions it's missing. Deletions go first,
+// so a relay never takes a version of a place it should delete.
+async function sendCopies(copies: Copy[], run: number) {
+  if (copies.length === 0) return
+  let left = copies.length
+  setState({ copying: left })
+  const deletions = copies.filter((c) => c.event.kind === DELETION_KIND)
+  const places = copies.filter((c) => c.event.kind !== DELETION_KIND)
+  for (const batch of [deletions, places]) {
+    await runAll(batch, undefined, async ({ event, to }) => {
+      if (run !== generation) return
+      const results = await Promise.allSettled(pool.publish(to, event))
+      for (const r of results) if (r.status === 'rejected') console.warn('A relay refused a copy', r.reason)
+      if (run === generation) setState({ copying: --left })
+    })
+  }
+}
+
+// Your private place events with these ids on a relay, PAGE_SIZE at a time.
+async function fetchByIds(url: string, pubkey: string, ids: string[]): Promise<NostrEvent[]> {
   const events: NostrEvent[] = []
   for (const batch of chunks(ids, PAGE_SIZE)) {
     events.push(
-      ...(await placesPool.querySync([RELAY_URL], {
+      ...(await placesPool.querySync([url], {
         ids: batch,
         kinds: [PRIVATE_PLACE_KIND],
         authors: [pubkey],
@@ -500,12 +639,18 @@ function requireKey(): { nostr: Nostr; pubkey: string } {
   return { nostr, pubkey }
 }
 
+// Sends an event to every relay; done once one takes it. Those that didn't get
+// it are sent it on the next load (see syncWithRelays).
 async function publish(event: NostrEvent): Promise<void> {
+  const relays = getRelays().relays
   try {
-    await Promise.any(pool.publish([RELAY_URL], event))
+    await Promise.any(pool.publish([...relays], event))
   } catch (error) {
     const reason = error instanceof AggregateError ? error.errors[0] : error
-    throw new Error(`The relay refused it: ${reason instanceof Error ? reason.message : reason}`)
+    const message = reason instanceof Error ? reason.message : String(reason)
+    throw new Error(
+      relays.length === 1 ? `The relay refused it: ${message}` : `No relay took it: ${message}`,
+    )
   }
 }
 
@@ -532,12 +677,16 @@ function nowSeconds(): number {
   return Math.floor(Date.now() / 1000)
 }
 
-// Every private place of an author, a page at a time from the newest back.
-async function fetchAll(pubkey: string, onPage?: (loaded: number) => void): Promise<NostrEvent[]> {
+// Every private place of an author on a relay, a page at a time from the newest back.
+async function fetchAll(
+  url: string,
+  pubkey: string,
+  onPage?: (loaded: number) => void,
+): Promise<NostrEvent[]> {
   const byId = new Map<string, NostrEvent>()
   let until: number | undefined
   for (;;) {
-    const page = await placesPool.querySync([RELAY_URL], {
+    const page = await placesPool.querySync([url], {
       kinds: [PRIVATE_PLACE_KIND],
       authors: [pubkey],
       limit: PAGE_SIZE,

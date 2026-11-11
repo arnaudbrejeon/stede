@@ -7,6 +7,7 @@ import {
   type ImportResult,
 } from '../placeStore'
 import { useKey } from '../keystore'
+import { useRelays } from '../relayList'
 
 // Through an extension, imports of more places than this ask first.
 const EXTENSION_CONFIRM_ABOVE = 5
@@ -22,6 +23,7 @@ export function PlacesData() {
   const [error, setError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const { kind } = useKey()
+  const onRelays = useRelays().relays.length > 1 ? 'your relays' : 'the relay'
   // An import waiting for the go-ahead, with how many places it will write.
   const [confirming, setConfirming] = useState<{
     count: number
@@ -107,8 +109,8 @@ export function PlacesData() {
             ? `Decrypting… ${opened.toLocaleString()} / ${plural(loaded, 'place')}`
             : `Loading… ${plural(loaded, 'place')}`
           : syncing
-            ? `${plural(count, 'place')} in this browser; checking the relay for changes…`
-            : `${plural(count, 'place')} on the relay.`}{' '}
+            ? `${plural(count, 'place')} in this browser; checking ${onRelays} for changes…`
+            : `${plural(count, 'place')} on ${onRelays}.`}{' '}
         The export file holds them unencrypted: keep it somewhere safe.
       </p>
       <div className="places-data-buttons">
@@ -215,7 +217,7 @@ function summary(r: ImportResult): string {
     r.merged && `${plural(r.merged, 'duplicate')} merged`,
     r.unchanged && `${r.unchanged.toLocaleString()} already there`,
     r.invalid && `${r.invalid.toLocaleString()} invalid, skipped`,
-    r.failed && `${r.failed.toLocaleString()} refused by the relay`,
+    r.failed && `${r.failed.toLocaleString()} refused by the relays`,
   ].filter(Boolean)
   return `Imported: ${parts.join(', ')}.`
 }

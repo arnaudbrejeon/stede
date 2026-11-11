@@ -1292,6 +1292,53 @@ body,
   display: flex;
   gap: 8px;
 }
+/* The relays your places are kept on (RelaysSetting). */
+.relay-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.relay-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 15px;
+}
+.relay-list .link-button {
+  margin: 0;
+}
+/* Not stacked like the key panel's other labels. */
+.key-form .relay-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  font-size: 15px;
+  color: var(--ink);
+}
+.key-form .relay-check input {
+  width: auto;
+}
+.relay-host {
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  color: var(--muted);
+}
+.relay-add {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+.key-form .relay-add input {
+  flex: 1;
+  min-width: 0;
+}
 .progress {
   display: flex;
   flex-direction: column;

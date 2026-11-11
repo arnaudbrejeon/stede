@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { getPublicKey } from 'nostr-tools'
 import * as nip19 from 'nostr-tools/nip19'
 import { PlacesData } from './PlacesData'
+import { RelaysSetting } from './RelaysSetting'
 import {
   addPasskey,
   addPassword,
@@ -281,6 +282,7 @@ function Unlocked({ pubkey, passkey, password }: UnlockProps) {
       <PasskeySetting pubkey={pubkey} passkey={passkey} password={password} />
       <ForgetButton />
       <PlacesData />
+      <RelaysSetting />
     </div>
   )
 }
@@ -323,6 +325,7 @@ function ExtensionConnected({ pubkey }: { pubkey: string }) {
         Stop using the extension
       </button>
       <PlacesData />
+      <RelaysSetting />
     </div>
   )
 }

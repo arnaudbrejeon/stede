@@ -18,7 +18,7 @@ import { uniqueLabels } from './tags'
 
 export const PLACE_KIND = 31300
 export const PRIVATE_PLACE_KIND = 31301
-const DELETION_KIND = 5
+export const DELETION_KIND = 5
 // NIP-32 label namespace (reverse domain of stede.cc) for the icon chosen in stede.
 const ICON_LABEL = 'cc.stede.icon'
 // NIP-73 identifier of the OpenStreetMap object: osm:node/123, osm:way/…, osm:relation/…

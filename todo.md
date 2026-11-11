@@ -38,10 +38,6 @@
   places on the relay, under the same cache key, so a new device needs one
   decryption and a download.
 
-- **Save places to more than one relay.** Private places are encrypted and
-  signed, so any relay can hold them: also writing to a relay from your NIP-65
-  list (kind 10002) would keep a copy independent of the stede relay.
-
 - **Post the comment on the Places NIP** (nostr-protocol/nips#2492) about
   private places on kind 31301, once the design has settled. Possibly also a
   note that `t` labels keep their case.
