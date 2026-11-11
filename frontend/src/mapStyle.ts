@@ -208,7 +208,11 @@ function withRailways(style: maplibregl.StyleSpecification): maplibregl.StyleSpe
       openrailwaymap: {
         type: 'raster',
         tiles: ['a', 'b', 'c'].map((s) => `https://${s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png`),
-        tileSize: 256,
+        // The tiles are 512 pixels, drawn at 256 for sharp screens. Each zoom's
+        // tiles are used from where they're shown at that size or larger, never
+        // shrunk, as their station names would become too small to read: from
+        // halfway between zooms, at the usual 256, they'd be at 71%.
+        tileSize: Math.round(256 * Math.SQRT2),
         maxzoom: 19,
         attribution:
           'Railways © <a href="https://www.openrailwaymap.org" target="_blank">OpenRailwayMap</a> (CC-BY-SA)',
