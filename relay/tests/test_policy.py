@@ -41,13 +41,17 @@ def test_other_kinds_are_blocked_even_from_registered_authors() -> None:
     assert policy.check(place(kind=0), AUTHORS).startswith("blocked")
 
 
-def test_deletions_and_bookmark_sets_are_accepted() -> None:
+def test_deletions_bookmark_sets_and_relay_sets_are_accepted() -> None:
     assert policy.check(place(kind=policy.DELETION_KIND, tags=[]), AUTHORS) is None
     assert (
         policy.check(
             place(kind=policy.BOOKMARK_SET_KIND, tags=[["d", "to-try"]]), AUTHORS
         )
         is None
+    )
+    relays = [["d", "stede"], ["relay", "wss://relay.stede.cc/"]]
+    assert (
+        policy.check(place(kind=policy.RELAY_SET_KIND, tags=relays), AUTHORS) is None
     )
 
 

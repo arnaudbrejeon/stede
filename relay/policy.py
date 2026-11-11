@@ -8,6 +8,7 @@ Accepted kinds:
   31300  place (NIP-XX Places, https://github.com/nostr-protocol/nips/issues/2492)
   31301  private place: a place NIP-44 encrypted to its author (proposed for NIP-XX)
   30003  bookmark set (NIP-51), e.g. a curated list of places
+  30002  relay set (NIP-51): the relays your places are kept on (d "stede")
       5  deletion request (NIP-09)
 
 Authors: hex pubkeys listed in the file named by STEDE_RELAY_AUTHORS
@@ -29,8 +30,15 @@ from pathlib import Path
 PLACE_KIND = 31300
 PRIVATE_PLACE_KIND = 31301
 BOOKMARK_SET_KIND = 30003
+RELAY_SET_KIND = 30002
 DELETION_KIND = 5
-ALLOWED_KINDS = {PLACE_KIND, PRIVATE_PLACE_KIND, BOOKMARK_SET_KIND, DELETION_KIND}
+ALLOWED_KINDS = {
+    PLACE_KIND,
+    PRIVATE_PLACE_KIND,
+    BOOKMARK_SET_KIND,
+    RELAY_SET_KIND,
+    DELETION_KIND,
+}
 
 AUTHORS_FILE = Path(os.environ.get("STEDE_RELAY_AUTHORS", "/app/authors.txt"))
 OPEN_WRITES = os.environ.get("STEDE_RELAY_OPEN_WRITES") == "1"
