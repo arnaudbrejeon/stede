@@ -87,6 +87,14 @@ describe('view history', () => {
     expect(history.back(c, REACH)).toBe(nearB)
   })
 
+  it('tells a new stop from looking around the last', () => {
+    const history = new ViewHistory()
+    expect(history.isNewStop(a, REACH)).toBe(true)
+    history.record(b, REACH)
+    expect(history.isNewStop(nearB, REACH)).toBe(false)
+    expect(history.isNewStop(c, REACH)).toBe(true)
+  })
+
   it('has no way back from around the only view', () => {
     const history = new ViewHistory()
     history.record(b, REACH)

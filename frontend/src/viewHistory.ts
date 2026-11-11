@@ -31,7 +31,7 @@ export class ViewHistory {
   // browser, arriving somewhere new after stepping back drops the views that
   // were ahead.
   record(view: View, reach: number): void {
-    if (this.index >= 0 && sameStop(this.views[this.index], view, reach)) {
+    if (!this.isNewStop(view, reach)) {
       this.views[this.index] = view
       return
     }
@@ -39,6 +39,11 @@ export class ViewHistory {
     this.views.push(view)
     if (this.views.length > MAX_VIEWS) this.views.shift()
     this.index = this.views.length - 1
+  }
+
+  // Whether resting on a view would add a stop, rather than replace the last.
+  isNewStop(view: View, reach: number): boolean {
+    return this.index < 0 || !sameStop(this.views[this.index], view, reach)
   }
 
   // `now` is the view on screen, which may not have rested long enough to be

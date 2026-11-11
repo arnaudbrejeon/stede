@@ -30,6 +30,10 @@ export type PlacesMapHandle = {
   goForward: () => void
 }
 
+// Where the map is in remembering a new view (see viewHistory): waiting for it
+// to rest there long enough, or just having recorded it.
+export type StopProgress = 'idle' | 'pending' | 'recorded'
+
 // [longitude, latitude]
 export type LngLat = [number, number]
 
@@ -59,6 +63,8 @@ type PlacesMapProps = {
   onLocateError?: (message: string) => void
   // Told whether there are views to step back and forward to, as that changes.
   onHistoryChange?: (canGoBack: boolean, canGoForward: boolean) => void
+  // Told when the map starts waiting to remember a new view, gives up, or does.
+  onStopProgress?: (progress: StopProgress) => void
 }
 
 export function PlacesMap({
@@ -74,6 +80,7 @@ export function PlacesMap({
   pin = null,
   onLocateError,
   onHistoryChange,
+  onStopProgress,
 }: PlacesMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
@@ -95,6 +102,7 @@ export function PlacesMap({
   const onPinDropRef = useRef(onPinDrop)
   const pinMarkerRef = useRef<maplibregl.Marker | null>(null)
   const onHistoryChangeRef = useRef(onHistoryChange)
+  const onStopProgressRef = useRef(onStopProgress)
   const historyRef = useRef<ViewHistory>(null)
   historyRef.current ??= new ViewHistory()
 
@@ -316,16 +324,26 @@ export function PlacesMap({
     // A view the map rests on for a while goes into the history, unless it's
     // still around the last one (see viewReach). Stepping through the history
     // lands on a view already there, which isn't added again.
+    // The wait is only shown for a view that would add a way back: not the
+    // first view, nor one around the last.
     let settleTimer: ReturnType<typeof setTimeout> | undefined
+    let pending = false
     const awaitSettle = () => {
       clearTimeout(settleTimer)
+      const history = historyRef.current!
+      pending = !history.isEmpty && history.isNewStop(currentView(map), viewReach(map))
+      if (pending) onStopProgressRef.current?.('pending')
       settleTimer = setTimeout(() => {
-        historyRef.current!.record(currentView(map), viewReach(map))
+        history.record(currentView(map), viewReach(map))
         reportHistory(map)
+        if (pending) onStopProgressRef.current?.('recorded')
+        pending = false
       }, SETTLE_MS)
     }
     map.on('movestart', (e) => {
       clearTimeout(settleTimer)
+      if (pending) onStopProgressRef.current?.('idle')
+      pending = false
       // The view you start from counts even if you leave it straight away, so
       // there's always a way back to it.
       const history = historyRef.current!
@@ -417,9 +435,10 @@ export function PlacesMap({
     onSelectRef.current = onSelect
     onLocateErrorRef.current = onLocateError
     onHistoryChangeRef.current = onHistoryChange
+    onStopProgressRef.current = onStopProgress
     // Markers already drawn keep their colours; tag colours are fixed for the session.
     tagColorsRef.current = tagColors
-  }, [onSelect, onLocateError, onHistoryChange, tagColors])
+  }, [onSelect, onLocateError, onHistoryChange, onStopProgress, tagColors])
 
   return <div ref={containerRef} className="map" />
 }

@@ -5,7 +5,7 @@ import { FilterPanel } from './components/FilterPanel'
 import { Header } from './components/Header'
 import { KeyPanel } from './components/KeyPanel'
 import { PlaceDetails } from './components/PlaceDetails'
-import { PlacesMap, PLACE_ZOOM, type LngLat, type PlacesMapHandle } from './components/PlacesMap'
+import { PlacesMap, PLACE_ZOOM, type LngLat, type PlacesMapHandle, type StopProgress } from './components/PlacesMap'
 import type { GeocodeResult } from './geocoder'
 import { useKey } from './keystore'
 import { usePlaces } from './placeStore'
@@ -13,6 +13,7 @@ import { withWelcome } from './welcomePlace'
 import { allTags, filterPlaces, type Place, type TagLine } from './places'
 import { buildTagColors } from './tags'
 import { useHiddenBottom } from './useHiddenBottom'
+import { SETTLE_MS } from './viewHistory'
 import { placeIdsByOsm } from './places'
 
 function App() {
@@ -49,6 +50,9 @@ function App() {
     setCanGoBack(back)
     setCanGoForward(forward)
   }, [])
+  // Shown on '<': a ring filling while a new view waits to be remembered, then
+  // a bump as it is.
+  const [stopProgress, setStopProgress] = useState<StopProgress>('idle')
   const appRef = useRef<HTMLDivElement>(null)
   const drawerRef = useRef<HTMLElement>(null)
   const mapRef = useRef<PlacesMapHandle>(null)
@@ -157,6 +161,7 @@ function App() {
           pin={pin}
           onLocateError={setLocateError}
           onHistoryChange={noteHistory}
+          onStopProgress={setStopProgress}
         />
         {/* Filters are for browsing your places; out of the way while adding one. */}
         {placesError && <p className="places-error">{placesError}</p>}
@@ -186,12 +191,20 @@ function App() {
         <div className="map-actions">
           <button
             type="button"
-            className="map-step"
+            className={stopProgress === 'recorded' ? 'map-step bump' : 'map-step'}
             aria-label="Previous map view"
             title="Previous map view"
             disabled={!canGoBack}
             onClick={() => mapRef.current?.goBack()}
+            onAnimationEnd={(e) => {
+              if (e.animationName === 'map-step-bump') setStopProgress('idle')
+            }}
           >
+            {stopProgress === 'pending' && (
+              <svg className="settle-ring" viewBox="0 0 48 48" aria-hidden="true">
+                <circle cx="24" cy="24" r="22" pathLength="1" style={{ animationDuration: `${SETTLE_MS}ms` }} />
+              </svg>
+            )}
             <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
               <path d="M12.5 4 6.5 10l6 6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>

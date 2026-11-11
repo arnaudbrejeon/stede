@@ -600,6 +600,7 @@ body,
   box-shadow: 0 4px 14px rgba(var(--shadow), 0.3);
 }
 .map-step {
+  position: relative;
   width: 40px;
   height: 40px;
   color: var(--ink);
@@ -614,6 +615,47 @@ body,
   background: var(--panel);
   opacity: 0.6;
   cursor: default;
+}
+/* Around '<' while the map waits to remember a new view, filling anticlockwise
+   from the top, the way back; the button bumps once it has. */
+.settle-ring {
+  position: absolute;
+  inset: -4px;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+  /* The stroke starts at three o'clock and runs clockwise: turned to the top, then mirrored. */
+  transform: scaleX(-1) rotate(-90deg);
+  pointer-events: none;
+}
+.settle-ring circle {
+  fill: none;
+  stroke: var(--action);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: settle-ring linear forwards;
+}
+@keyframes settle-ring {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.map-step.bump {
+  animation: map-step-bump 320ms ease-out;
+}
+@keyframes map-step-bump {
+  40% {
+    transform: scale(1.18);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .settle-ring {
+    display: none;
+  }
+  .map-step.bump {
+    animation: none;
+  }
 }
 .add-place:focus-visible,
 .map-step:focus-visible {
