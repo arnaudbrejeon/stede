@@ -186,6 +186,38 @@ const TOPOGRAPHIC_STYLE: maplibregl.StyleSpecification = {
   layers: [{ id: 'opentopomap', type: 'raster', source: 'opentopomap' }],
 }
 
+// OpenRailwayMap: train, metro and tram lines on see-through tiles, laid over
+// the map under its labels. Volunteer-run, under a fair-use policy, so an
+// option, never the default. The tiles carry station names of their own, so
+// they go above all of the map's roads and bridges, some of which come after
+// its first labels; and the map's own stops (poi_transit), mostly bus stops
+// named after the station they serve, would name each station twice: only its
+// airports are kept.
+function withRailways(style: maplibregl.StyleSpecification): maplibregl.StyleSpecification {
+  const layers = style.layers.map((layer) =>
+    layer.id === 'poi_transit'
+      ? ({ ...layer, filter: ['==', ['get', 'class'], 'airport'] } as maplibregl.LayerSpecification)
+      : layer,
+  )
+  const at = layers.findLastIndex((layer) => layer.type !== 'symbol') + 1
+  const railways: maplibregl.LayerSpecification = { id: 'openrailwaymap', type: 'raster', source: 'openrailwaymap' }
+  return {
+    ...style,
+    sources: {
+      ...style.sources,
+      openrailwaymap: {
+        type: 'raster',
+        tiles: ['a', 'b', 'c'].map((s) => `https://${s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png`),
+        tileSize: 256,
+        maxzoom: 19,
+        attribution:
+          'Railways © <a href="https://www.openrailwaymap.org" target="_blank">OpenRailwayMap</a> (CC-BY-SA)',
+      },
+    },
+    layers: [...layers.slice(0, at), railways, ...layers.slice(at)],
+  }
+}
+
 // How the place layers are drawn on a map type (see PlacesMap's addLayers).
 export type PlaceInk = {
   // Place names and their halo.
@@ -227,6 +259,13 @@ export const MAP_TYPES: readonly MapType[] = [
     label: 'Topographic',
     style: TOPOGRAPHIC_STYLE,
     transform: (style) => style,
+    ink: DAY_INK,
+  },
+  {
+    key: 'railways',
+    label: 'Railways',
+    style: BASE_STYLE_URL,
+    transform: (style) => withRailways(tintStyle(flattenStyle(style), VELLUM_MAP_COLORS)),
     ink: DAY_INK,
   },
 ]
