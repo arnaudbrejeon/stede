@@ -52,8 +52,7 @@ certificate (fine for everything but location).
 
 ### Trying a remote signer
 
-Remote signers (NIP-46) are offered in development only for now. To try one
-without a phone, run a relay and a bunker with
+To try a remote signer (NIP-46) without a phone, run a relay and a bunker with
 [nak](https://github.com/fiatjaf/nak), each in its own terminal:
 
 ```sh

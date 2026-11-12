@@ -24,7 +24,7 @@ import {
   useKey,
 } from '../keystore'
 import { passkeysAvailable } from '../passkey'
-import { hasExtension, OFFER_REMOTE_SIGNERS } from '../signer'
+import { hasExtension } from '../signer'
 
 // Adding, unlocking and locking the user's Nostr key (see keystore.ts).
 type KeyPanelProps = {
@@ -46,7 +46,7 @@ export function KeyPanel({ forAdding }: KeyPanelProps) {
       {status === 'none' && (
         <>
           <UseExtension />
-          {OFFER_REMOTE_SIGNERS && <UseRemote />}
+          <UseRemote />
           <AddKey />
         </>
       )}
@@ -316,9 +316,7 @@ function UseExtension() {
         {busy ? 'Waiting for the extension…' : 'Use my Nostr extension'}
       </button>
       {error && <p className="key-error">{error}</p>}
-      <p className="key-divider">
-        {OFFER_REMOTE_SIGNERS ? 'or use a remote signer' : 'or keep your key in this browser'}
-      </p>
+      <p className="key-divider">or use a remote signer</p>
     </div>
   )
 }

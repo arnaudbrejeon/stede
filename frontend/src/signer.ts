@@ -34,10 +34,6 @@ export function asNostr(extension: WindowNostr): Nostr {
   return extension as Nostr
 }
 
-// Offered in development only for now: tried with nak's bunker, not yet with
-// Amber or another signer on a phone.
-export const OFFER_REMOTE_SIGNERS = import.meta.env.DEV
-
 // How long a remote signer may take to answer: long enough for its owner to
 // approve a request on their phone.
 const REMOTE_TIMEOUT_MS = 60_000
