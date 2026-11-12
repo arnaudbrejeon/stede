@@ -9,7 +9,7 @@ import {
 import { useKey } from '../keystore'
 import { useRelays } from '../relayList'
 
-// Through an extension, imports of more places than this ask first.
+// Through an extension or remote signer, imports of more places than this ask first.
 const EXTENSION_CONFIRM_ABOVE = 5
 
 type Job = { label: string; done: number; total: number }
@@ -69,10 +69,10 @@ export function PlacesData() {
     setAbort(controller)
     return run('Importing', async (progress) => {
       try {
-        // An extension may ask before each place: say how many first, so it can
-        // be set to allow stede for the import.
+        // An extension or remote signer may ask before each place: say how many
+        // first, so it can be set to allow stede for the import.
         const beforeWrite = (count: number) =>
-          kind === 'extension' && count > EXTENSION_CONFIRM_ABOVE
+          kind !== 'local' && count > EXTENSION_CONFIRM_ABOVE
             ? new Promise<boolean>((resolve) =>
                 setConfirming({
                   count,
@@ -145,7 +145,8 @@ export function PlacesData() {
       {confirming && (
         <div className="import-confirm" role="alertdialog" aria-label="Before importing">
           <p>
-            This import will ask your Nostr extension to encrypt and sign{' '}
+            This import will ask your {kind === 'remote' ? 'remote signer' : 'Nostr extension'} to
+            encrypt and sign{' '}
             {plural(confirming.count, 'place')}. If it asks you each time, set it to allow this site
             now, then continue.
           </p>

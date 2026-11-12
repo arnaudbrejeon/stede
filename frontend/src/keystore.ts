@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
-import { getPublicKey } from 'nostr-tools'
+import { generateSecretKey, getPublicKey } from 'nostr-tools'
+import { BunkerSigner, parseBunkerInput, type BunkerPointer } from 'nostr-tools/nip46'
 import * as nip19 from 'nostr-tools/nip19'
 import * as nip49 from 'nostr-tools/nip49'
 import {
@@ -8,7 +9,7 @@ import {
   unlockingKey,
   type PasskeyRecord,
 } from './passkey'
-import { asNostr, findExtension, localNostr, type Nostr } from './signer'
+import { asNostr, findExtension, localNostr, remoteNostr, signerAnswer, type Nostr } from './signer'
 
 // The user's Nostr key, kept in this browser.
 //
@@ -36,6 +37,13 @@ import { asNostr, findExtension, localNostr, type Nostr } from './signer'
 //
 // Or the key stays in a NIP-07 browser extension (nos2x, Alby…): the app only
 // remembers which public key it used, and asks the extension each time.
+//
+// Or in a remote signer (NIP-46: Amber, nak bunker…), paired by pasting its
+// bunker:// link. The app remembers the signer and the key it made to talk to
+// it, and sends it each request over the signer's relays. That client key
+// can't sign as you, but the signer answers what it asks, within what it was
+// allowed when paired: anything running on this origin could ask too, like an
+// extension's.
 
 // scrypt cost of the NIP-49 encryption: 2^17 rounds, 128 MiB, a fraction of a
 // second on a laptop and still bearable on a phone, once per browser session.
@@ -43,6 +51,9 @@ const SCRYPT_LOG_N = 17
 
 const STORED = 'stede.key' // localStorage: {pubkey, ncryptsec?, passkey?}, at least one
 const EXTENSION = 'stede.extension' // localStorage: the extension's pubkey
+const REMOTE = 'stede.remote' // localStorage: {pubkey, clientKey, bunker}, the remote signer
+// How long reconnecting to a remote signer at start waits for it.
+const REMOTE_RECONNECT_MS = 15_000
 const SESSION = 'stede.session' // sessionStorage: the key wrapped with the session key
 const KEPT = 'stede.kept' // localStorage: {wrapped, lastUsed}, the same, staying unlocked
 const STAY_UNLOCKED_DAYS = 30
@@ -54,8 +65,9 @@ const CHANNEL = 'stede-keystore'
 const SHARE_TIMEOUT_MS = 300
 
 export type KeyStatus = 'loading' | 'none' | 'locked' | 'unlocked'
-// Where the key is: in this browser, encrypted with a password, or in an extension.
-export type KeyKind = 'local' | 'extension'
+// Where the key is: in this browser, encrypted with a password, in an
+// extension, or in a remote signer.
+export type KeyKind = 'local' | 'extension' | 'remote'
 // `passkey`, `password`: what unlocks the key kept here.
 export type KeyState = {
   status: KeyStatus
@@ -75,6 +87,9 @@ const NO_KEY: KeyState = {
 
 type Stored = { pubkey: string; ncryptsec?: string; passkey?: PasskeyRecord }
 type Kept = { wrapped: string; lastUsed: number }
+// The remote signer paired: whose key, the client key (hex) and the bunker,
+// its one-time secret dropped once used.
+type Remote = { pubkey: string; clientKey: string; bunker: BunkerPointer }
 // `stayUnlocked`: past this browser session, on this device (see KEPT).
 export type UnlockOptions = { stayUnlocked?: boolean }
 type Message = { type: 'request' } | { type: 'share'; wrapped: string } | { type: 'lock' }
@@ -82,6 +97,8 @@ type Message = { type: 'request' } | { type: 'share'; wrapped: string } | { type
 let state: KeyState = { ...NO_KEY, status: 'loading' }
 let secretKey: Uint8Array | null = null
 let nostr: Nostr | null = null
+// The connection to the remote signer, when that's where the key is.
+let remoteSigner: BunkerSigner | null = null
 // This tab's wrapped copy, shared with tabs opened later.
 let wrappedKey: string | null = null
 // This tab's unlock is kept past the browser session (KEPT).
@@ -116,11 +133,15 @@ export function getNostr(): Nostr | null {
 }
 
 // Reads the stored key and resumes this browser session's unlock if there is
-// one, or reconnects to the extension used last time.
+// one, or reconnects to the extension or remote signer used last time.
 export async function initKey(): Promise<KeyState> {
   const extensionPubkey = readExtension()
   if (extensionPubkey) {
     await reconnectExtension(extensionPubkey)
+    return state
+  }
+  if (readRemote()) {
+    await reconnectRemote()
     return state
   }
   const stored = readStored()
@@ -207,6 +228,80 @@ function readExtension(): string | null {
   } catch {
     return null
   }
+}
+
+// Pairs with a remote signer from its bunker:// link (or NIP-05 name), with a
+// new client key. The signer may ask its owner to approve first.
+export async function connectRemote(input: string): Promise<void> {
+  const bunker = await parseBunkerInput(input.trim())
+  if (!bunker) throw new Error('This is not a bunker:// link.')
+  const clientKey = generateSecretKey()
+  const signer = BunkerSigner.fromBunker(clientKey, bunker)
+  try {
+    await signerAnswer(signer.connect({ name: 'Stede', url: location.origin }))
+    const usable = remoteNostr(signer)
+    const pubkey = await usable.getPublicKey()
+    writeRemote({ pubkey, clientKey: bytesToHex(clientKey), bunker: { ...bunker, secret: null } })
+    startRemote(signer, usable, pubkey)
+  } catch (error) {
+    void signer.close()
+    throw error
+  }
+}
+
+// Asks the remote signer paired last time, as at start.
+export async function reconnectRemote(): Promise<void> {
+  const remote = readRemote()
+  if (!remote) return
+  void remoteSigner?.close()
+  remoteSigner = null
+  const signer = BunkerSigner.fromBunker(hexToBytes(remote.clientKey), remote.bunker)
+  try {
+    const usable = remoteNostr(signer, REMOTE_RECONNECT_MS)
+    // The signer may have switched accounts since: use the one it has now.
+    const pubkey = await usable.getPublicKey()
+    if (pubkey !== remote.pubkey) writeRemote({ ...remote, pubkey })
+    startRemote(signer, remoteNostr(signer), pubkey)
+  } catch (error) {
+    console.warn('Remote signer unavailable', error)
+    void signer.close()
+    nostr = null
+    setState({ ...NO_KEY, status: 'locked', pubkey: remote.pubkey, kind: 'remote' })
+  }
+}
+
+// Stops using the remote signer; a key kept here (if any) is offered again.
+// The signer keeps the pairing until its owner removes it there.
+export function disconnectRemote(): void {
+  localStorage.removeItem(REMOTE)
+  void remoteSigner?.close()
+  remoteSigner = null
+  nostr = null
+  const stored = readStored()
+  setState(stored ? localState('locked', stored) : NO_KEY)
+}
+
+function startRemote(signer: BunkerSigner, usable: Nostr, pubkey: string) {
+  remoteSigner = signer
+  nostr = usable
+  setState({ ...NO_KEY, status: 'unlocked', pubkey, kind: 'remote' })
+}
+
+function readRemote(): Remote | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(REMOTE) ?? 'null')
+    const valid =
+      typeof value?.pubkey === 'string' &&
+      typeof value?.clientKey === 'string' &&
+      Array.isArray(value?.bunker?.relays)
+    return valid ? value : null
+  } catch {
+    return null
+  }
+}
+
+function writeRemote(remote: Remote) {
+  localStorage.setItem(REMOTE, JSON.stringify(remote))
 }
 
 // Stores the user's own key (nsec, or 64 hex characters) encrypted with a new password.
@@ -372,8 +467,8 @@ function dropSession() {
   sessionStorage.removeItem(SESSION)
   localStorage.removeItem(KEPT)
   staying = false
-  // The extension isn't locked by this; only a key kept here is.
-  if (state.kind === 'extension') return
+  // An extension or remote signer isn't locked by this; only a key kept here is.
+  if (state.kind !== 'local') return
   secretKey?.fill(0)
   secretKey = null
   nostr = null
@@ -522,4 +617,8 @@ function dbRequest<T>(
 
 function hexToBytes(hex: string): Uint8Array {
   return Uint8Array.from(hex.match(/../g)!, (byte) => parseInt(byte, 16))
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
 }

@@ -1,10 +1,11 @@
 import { finalizeEvent, getPublicKey, nip44 } from 'nostr-tools'
 import type { WindowNostr } from 'nostr-tools/nip07'
+import type { BunkerSigner } from 'nostr-tools/nip46'
 
 // Your key as the app uses it: the NIP-07 API of Nostr browser extensions
 // (window.nostr), with NIP-44 encryption. A key kept in this browser
-// (keystore.ts) is wrapped in the same API, so the rest of the app works the
-// same whichever holds the key.
+// (keystore.ts), or in a remote signer, is wrapped in the same API, so the
+// rest of the app works the same whichever holds the key.
 export type Nostr = WindowNostr & { nip44: NonNullable<WindowNostr['nip44']> }
 
 // A key kept in this browser, behind the extension API.
@@ -31,6 +32,42 @@ export function localNostr(secretKey: Uint8Array): Nostr {
 export function asNostr(extension: WindowNostr): Nostr {
   if (!extension.nip44) throw new Error('This extension can’t encrypt with NIP-44.')
   return extension as Nostr
+}
+
+// Offered in development only for now: tried with nak's bunker, not yet with
+// Amber or another signer on a phone.
+export const OFFER_REMOTE_SIGNERS = import.meta.env.DEV
+
+// How long a remote signer may take to answer: long enough for its owner to
+// approve a request on their phone.
+const REMOTE_TIMEOUT_MS = 60_000
+
+// A remote signer (NIP-46: Amber, nak bunker…), behind the extension API. Each
+// call is a request over its relays, so one that's never answered (the phone
+// asleep, the signer gone) fails after `timeoutMs` instead of waiting forever.
+export function remoteNostr(signer: BunkerSigner, timeoutMs = REMOTE_TIMEOUT_MS): Nostr {
+  const answer = <T>(request: Promise<T>) => signerAnswer(request, timeoutMs)
+  return {
+    getPublicKey: () => answer(signer.getPublicKey()),
+    signEvent: (event) => answer(signer.signEvent(event)),
+    nip44: {
+      encrypt: (peer, plaintext) => answer(signer.nip44Encrypt(peer, plaintext)),
+      decrypt: (peer, payload) => answer(signer.nip44Decrypt(peer, payload)),
+    },
+  }
+}
+
+// A remote signer's answer to `request`, or an error after `timeoutMs`. A
+// signer's refusal comes as its bare reason ("unauthorized"): made an Error.
+export function signerAnswer<T>(request: Promise<T>, timeoutMs = REMOTE_TIMEOUT_MS): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Your signer isn’t answering.')), timeoutMs)
+    request
+      .then(resolve, (error: unknown) =>
+        reject(error instanceof Error ? error : new Error(`Your signer refused: ${error}`)),
+      )
+      .finally(() => clearTimeout(timer))
+  })
 }
 
 // The NIP-07 extension, once it has injected itself into the page (some do so

@@ -8,12 +8,15 @@ import {
   addPassword,
   checkPassword,
   connectExtension,
+  connectRemote,
   disconnectExtension,
+  disconnectRemote,
   forgetKey,
   importKey,
   importKeyWithPasskey,
   lock,
   parseSecretKey,
+  reconnectRemote,
   removePasskey,
   staysUnlocked,
   unlock,
@@ -21,7 +24,7 @@ import {
   useKey,
 } from '../keystore'
 import { passkeysAvailable } from '../passkey'
-import { hasExtension } from '../signer'
+import { hasExtension, OFFER_REMOTE_SIGNERS } from '../signer'
 
 // Adding, unlocking and locking the user's Nostr key (see keystore.ts).
 type KeyPanelProps = {
@@ -43,17 +46,22 @@ export function KeyPanel({ forAdding }: KeyPanelProps) {
       {status === 'none' && (
         <>
           <UseExtension />
+          {OFFER_REMOTE_SIGNERS && <UseRemote />}
           <AddKey />
         </>
       )}
       {status === 'locked' && pubkey && kind === 'extension' && (
         <ExtensionMissing pubkey={pubkey} />
       )}
+      {status === 'locked' && pubkey && kind === 'remote' && <RemoteMissing pubkey={pubkey} />}
       {status === 'locked' && pubkey && kind === 'local' && (
         <Unlock pubkey={pubkey} passkey={passkey} password={password} />
       )}
       {status === 'unlocked' && pubkey && kind === 'extension' && (
         <ExtensionConnected pubkey={pubkey} />
+      )}
+      {status === 'unlocked' && pubkey && kind === 'remote' && (
+        <RemoteConnected pubkey={pubkey} />
       )}
       {status === 'unlocked' && pubkey && kind === 'local' && (
         <Unlocked pubkey={pubkey} passkey={passkey} password={password} />
@@ -308,7 +316,86 @@ function UseExtension() {
         {busy ? 'Waiting for the extension…' : 'Use my Nostr extension'}
       </button>
       {error && <p className="key-error">{error}</p>}
+      <p className="key-divider">
+        {OFFER_REMOTE_SIGNERS ? 'or use a remote signer' : 'or keep your key in this browser'}
+      </p>
+    </div>
+  )
+}
+
+// A remote signer (NIP-46: Amber, nak bunker…) keeps the key, maybe on another
+// device; stede sends it each request over its relays. Paired from the
+// bunker:// link the signer shows.
+function UseRemote() {
+  const [link, setLink] = useState('')
+  const { busy, error, run } = useAction()
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    run(() => connectRemote(link))
+  }
+  return (
+    <form className="key-form key-extension" onSubmit={submit}>
+      <p className="key-note">
+        With a remote signer (Amber, a bunker…), stede asks it to sign and encrypt, and never sees
+        your key. Paste the bunker:// link it gives you.
+      </p>
+      <label>
+        Bunker link
+        <input
+          type="text"
+          value={link}
+          onChange={(e) => setLink(e.target.value)}
+          placeholder="bunker://…"
+          autoComplete="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          required
+        />
+      </label>
+      {error && <p className="key-error">{error}</p>}
+      <button type="submit" className="key-button" disabled={busy}>
+        {busy ? 'Waiting for your signer…' : 'Connect'}
+      </button>
       <p className="key-divider">or keep your key in this browser</p>
+    </form>
+  )
+}
+
+function RemoteConnected({ pubkey }: { pubkey: string }) {
+  return (
+    <div className="key-form">
+      <Npub pubkey={pubkey} />
+      <p className="key-note">
+        Using your remote signer. Loading many places on a new device can take a while: it decrypts
+        them one by one, each a request to the signer.
+      </p>
+      <button type="button" className="link-button" onClick={disconnectRemote}>
+        Stop using the remote signer
+      </button>
+      <PlacesData />
+      <RelaysSetting />
+    </div>
+  )
+}
+
+function RemoteMissing({ pubkey }: { pubkey: string }) {
+  const { busy, error, run } = useAction()
+  return (
+    <div className="key-form">
+      <Npub pubkey={pubkey} />
+      <p className="key-note">Your remote signer isn’t answering. Is it running and online?</p>
+      <button
+        type="button"
+        className="key-button"
+        disabled={busy}
+        onClick={() => run(reconnectRemote)}
+      >
+        {busy ? 'Waiting for your signer…' : 'Connect again'}
+      </button>
+      {error && <p className="key-error">{error}</p>}
+      <button type="button" className="link-button" onClick={disconnectRemote}>
+        Stop using the remote signer
+      </button>
     </div>
   )
 }

@@ -50,6 +50,24 @@ the profile, and turn on full trust in Settings → General → About → Certif
 Trust Settings. Without `.cert/`, `dev:lan` falls back to a self-signed
 certificate (fine for everything but location).
 
+### Trying a remote signer
+
+Remote signers (NIP-46) are offered in development only for now. To try one
+without a phone, run a relay and a bunker with
+[nak](https://github.com/fiatjaf/nak), each in its own terminal:
+
+```sh
+nak serve    # a relay in memory, at ws://localhost:10547
+```
+
+```sh
+# a throwaway test key: never use it for anything real
+nak bunker --sec 674887bedf6a4b5238bfd181d1d0f1b70b7d5bc9818e85ea1329990483ee5555 ws://localhost:10547
+```
+
+The bunker prints a `bunker://` link and every request it gets. Paste the
+link under "Use a remote signer" in the key panel.
+
 ## Relay
 
 Places are Nostr events (kind 31300, see the
