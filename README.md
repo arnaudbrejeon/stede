@@ -123,3 +123,7 @@ cd backend && uv run python scripts/mapstr_to_stede.py   # data/mapstr.json -> d
 then import `data/stede-places.json` in the app. Importing merges duplicates
 (same name, and the same OpenStreetMap object or within 100 m) and updates
 places you already have instead of copying them.
+
+## License
+
+[MIT](LICENSE).
