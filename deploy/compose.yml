@@ -12,8 +12,9 @@ services:
       - relay-db:/app/strfry-db
       - ../relay/authors.txt:/app/authors.txt:ro
     environment:
-      # Only the pubkeys in relay/authors.txt may write.
-      STEDE_RELAY_OPEN_WRITES: "0"
+      # Any key may write (place events only, see relay/policy.py). "0" keeps
+      # writes to the pubkeys in relay/authors.txt.
+      STEDE_RELAY_OPEN_WRITES: "1"
     # Open files and connections: one per client socket, plus the database.
     ulimits:
       nofile: 65536

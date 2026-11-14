@@ -73,8 +73,10 @@ Places are Nostr events (kind 31300, see the
 [NIP-XX Places proposal](https://github.com/nostr-protocol/nips/issues/2492)).
 `relay/` holds a [strfry](https://github.com/hoytech/strfry) relay whose write
 policy (`relay/policy.py`) accepts only place events, private places (kind
-31301), bookmark sets of places (NIP-51, kind 30003) and deletions (NIP-09), and
-only from pubkeys listed in `relay/authors.txt`. Reads are open. The policy also
+31301), bookmark sets of places (NIP-51, kind 30003), relay sets (NIP-51, kind
+30002) and deletions (NIP-09). In production any key may write; without
+`STEDE_RELAY_OPEN_WRITES=1`, only the pubkeys listed in `relay/authors.txt`.
+Reads are open. The policy also
 checks that a place has a `d`, a `name` and a well-formed `geo` tag, and that
 its `g` geohashes match the coordinates. A private place is a place NIP-44
 encrypted to its author: it must show only its `d` tag, with everything else in
@@ -82,7 +84,7 @@ its encrypted content.
 
 ```sh
 docker compose up --build relay          # ws://localhost:7777, writes from relay/authors.txt
-STEDE_RELAY_OPEN_WRITES=1 docker compose up relay   # development: writes from anyone
+STEDE_RELAY_OPEN_WRITES=1 docker compose up relay   # writes from anyone, as in production
 cd backend && uv run pytest ../relay/tests          # policy tests
 ```
 

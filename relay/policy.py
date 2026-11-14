@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""strfry write policy for the stede relay: only place events, only from known authors.
+"""strfry write policy for the stede relay: only place events, from anyone or from known authors.
 
 strfry feeds one JSON line per incoming event on stdin and expects one JSON line
 back ({"id", "action", "msg"}). See https://github.com/hoytech/strfry/blob/master/docs/plugins.md
@@ -11,9 +11,9 @@ Accepted kinds:
   30002  relay set (NIP-51): the relays your places are kept on (d "stede")
       5  deletion request (NIP-09)
 
-Authors: hex pubkeys listed in the file named by STEDE_RELAY_AUTHORS
-(default /app/authors.txt; one per line, "#" comments). Set
-STEDE_RELAY_OPEN_WRITES=1 to accept any author (development only).
+Authors: with STEDE_RELAY_OPEN_WRITES=1 (production, deploy/compose.yml), any.
+Otherwise the hex pubkeys listed in the file named by STEDE_RELAY_AUTHORS
+(default /app/authors.txt; one per line, "#" comments).
 
 Only the standard library is used, so the script runs on the relay's python3.
 """

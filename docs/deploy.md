@@ -8,8 +8,7 @@
 | `wss://relay.stede.cc` | the Nostr relay (strfry) | Google Cloud VM, through a Cloudflare Tunnel |
 
 The relay is an ordinary public relay: any Nostr app can read from it, and any
-app can write to it for the pubkeys in `relay/authors.txt` (only place events,
-see `relay/policy.py`).
+app can write to it, with any key (only place events, see `relay/policy.py`).
 
 The VM runs `deploy/compose.yml`: the relay and `cloudflared`, which connects
 out to Cloudflare. Nothing listens on the VM's public address except
@@ -81,19 +80,21 @@ deploy/deploy.sh app     # app and API: built with VITE_RELAY_URL=wss://relay.st
 
 ## Who may write to the relay
 
-Add the pubkey (64-character hex, `nak decode npub1…` gives it) to
-`relay/authors.txt`, commit, and `deploy/deploy.sh relay`. strfry reads the
-file when it starts, and the deploy restarts it when the file changed. With an
-empty or missing file, nobody can write. Then `deploy/deploy.sh app` as well:
-the stats page lists the authors from the same file, read when the app is
-built.
+Anyone: `STEDE_RELAY_OPEN_WRITES` is `"1"` in `deploy/compose.yml`, so the
+policy takes place events from any key.
+
+To close the relay to chosen keys again, set it to `"0"` and add each pubkey
+(64-character hex, `nak decode npub1…` gives it) to `relay/authors.txt`,
+commit, and `deploy/deploy.sh relay`. strfry reads the file when it starts,
+and the deploy restarts it when the file changed. With an empty or missing
+file, nobody can write.
 
 ## Checking
 
 ```sh
 curl -H 'Accept: application/nostr+json' https://relay.stede.cc   # the relay's NIP-11 description
 curl https://stede.cc/api/health
-open https://stede.cc/stats                                        # how many places and authors the relay holds
+open https://stede.cc/stats                                        # how many places the relay holds
 gcloud compute ssh stede --zone us-central1-a --command 'cd stede && docker compose -f deploy/compose.yml logs --tail 50'
 ```
 

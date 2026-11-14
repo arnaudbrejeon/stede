@@ -1,23 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  fetchRelayStats,
-  histogram,
-  parseAuthors,
-  PRIVATE_PLACE_KIND,
-  type RelayStats as Stats,
-} from '../relayStats'
+import { fetchRelayStats, PRIVATE_PLACE_KIND, type RelayStats as Stats } from '../relayStats'
 import { RELAY_URL } from '../relayUrl'
 import { Logo } from './Logo'
 
-const AUTHORS = parseAuthors(__RELAY_AUTHORS_TXT__)
 const RELAY_HOST = new URL(RELAY_URL).host
 
 type State = { stats?: Stats; error?: string; counting: boolean }
 
 // The relay's figures (stats.html, stede.cc/stats): how many private places it
-// holds and how they spread over its authors, counted by the relay itself when
-// the page opens. Public: the counts say nothing about the places, which are
-// encrypted, and the pubkeys are on every event anyway.
+// holds, counted by the relay itself when the page opens. Public: the count
+// says nothing about the places, which are encrypted.
 export function RelayStats() {
   const [state, setState] = useState<State>({ counting: true })
   const run = useRef(0)
@@ -25,7 +17,7 @@ export function RelayStats() {
   // Only the latest count lands: a slow earlier one is ignored.
   const count = useCallback(() => {
     const current = ++run.current
-    fetchRelayStats(RELAY_URL, AUTHORS).then(
+    fetchRelayStats(RELAY_URL).then(
       (stats) => current === run.current && setState({ stats, counting: false }),
       (error: unknown) =>
         current === run.current &&
@@ -39,7 +31,6 @@ export function RelayStats() {
   }
 
   const { stats, error, counting } = state
-  const withPlaces = stats?.authors.filter((a) => a.count > 0).length ?? 0
 
   return (
     <main className="stats">
@@ -59,16 +50,6 @@ export function RelayStats() {
           <strong>{stats ? stats.events.toLocaleString() : '…'}</strong>
           <span>private places (kind {PRIVATE_PLACE_KIND} events)</span>
         </div>
-        <div className="stat">
-          <strong>{AUTHORS.length.toLocaleString()}</strong>
-          <span>
-            registered authors{stats && `, ${withPlaces.toLocaleString()} with places`}
-          </span>
-        </div>
-      </section>
-      <section className="stats-spread">
-        <h2>Authors by number of places</h2>
-        {stats ? <Histogram stats={stats} /> : <p className="stats-note">Counting…</p>}
       </section>
       <p className="stats-foot">
         {stats && (
@@ -81,35 +62,8 @@ export function RelayStats() {
           </>
         )}
       </p>
-      <p className="stats-note">
-        The counts come from the relay's own index (NIP-45); the authors are the ones the relay
-        accepts places from.
-      </p>
+      <p className="stats-note">The count comes from the relay's own index (NIP-45).</p>
     </main>
-  )
-}
-
-// One row a bucket, the bar from the left for its share of the authors, the
-// count beside it: the list is the table, the bars are a picture of it.
-function Histogram({ stats }: { stats: Stats }) {
-  const buckets = histogram(stats.authors)
-  const most = Math.max(1, ...buckets.map((b) => b.authors))
-  return (
-    <ol className="histogram">
-      {buckets.map((bucket) => (
-        <li
-          key={bucket.label}
-          className={bucket.authors ? undefined : 'empty'}
-          style={{ '--share': bucket.authors / most } as React.CSSProperties}
-        >
-          <span className="histogram-label">{bucket.label}</span>
-          <span className="histogram-track">
-            <span className="histogram-bar" />
-          </span>
-          <span className="histogram-value">{bucket.authors.toLocaleString()}</span>
-        </li>
-      ))}
-    </ol>
   )
 }
 
