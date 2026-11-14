@@ -122,6 +122,35 @@ describe('/api/search', () => {
   })
 })
 
+describe("Photon's budget", () => {
+  // Allows this many requests, then refuses.
+  function budgetOf(requests: number) {
+    return { limit: async () => ({ success: requests-- > 0 }) }
+  }
+  const searchUrl = `https://stede.cc/api/search?${new URLSearchParams({ q: 'eiffel', bbox: PARIS_VIEW })}`
+
+  it('answers while the budget lasts', async () => {
+    const fetch = photonReturning([TOWER], [])
+    const response = await handle(new Request(searchUrl), fetch, undefined, budgetOf(2))
+    expect(response.status).toBe(200)
+  })
+
+  it('answers 429 without asking Photon once it is spent', async () => {
+    const fetch = photonReturning([TOWER], [])
+    // A search with a view needs two requests.
+    const response = await handle(new Request(searchUrl), fetch, undefined, budgetOf(1))
+    expect(response.status).toBe(429)
+    expect(response.headers.get('Retry-After')).toBe('1')
+    expect(fetch.calls).toHaveLength(0)
+  })
+
+  it('covers address lookups too', async () => {
+    const fetch = photonReturning([], [])
+    const request = new Request('https://stede.cc/api/address?lat=1&lon=1')
+    expect((await handle(request, fetch, undefined, budgetOf(0))).status).toBe(429)
+  })
+})
+
 describe('/api/address', () => {
   const photon = (properties: Record<string, string>) => ({
     type: 'Feature',

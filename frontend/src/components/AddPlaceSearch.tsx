@@ -15,7 +15,11 @@ import type { LngLat } from './PlacesMap'
 import { ResultDetails } from './ResultDetails'
 
 const MIN_CHARS = 3
-const DEBOUNCE_MS = 300
+// Photon's public server throttles beyond seven requests a second, counted for
+// all of stede together, and a search is two requests. With this pause someone
+// stopping at every key makes four a second at most, so two people typing fit;
+// the backend holds back whatever goes over (worker/index.ts).
+const DEBOUNCE_MS = 500
 
 type AddPlaceSearchProps = {
   getView: () => MapView | undefined

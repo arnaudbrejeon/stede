@@ -10,6 +10,10 @@ import { findPlaceWebsite } from './placeWebsite'
 import { fetchImage } from './websiteImage'
 
 type Context = { waitUntil(promise: Promise<unknown>): void }
+// A Cloudflare rate limit (wrangler.jsonc): counts each call for a key, and says
+// no once the key is over its limit.
+type RateLimit = { limit(options: { key: string }): Promise<{ success: boolean }> }
+type Env = { PHOTON_BUDGET?: RateLimit }
 
 // How long Cloudflare (and browsers) may keep each kind of answer.
 const DAY = 86400
@@ -18,12 +22,16 @@ const SEARCH_MAX_AGE = 3600
 const EMPTY_MAX_AGE = 600
 
 export default {
-  fetch(request: Request, _env: unknown, ctx: Context): Promise<Response> {
-    return handle(request, withDefaults(fetch), ctx)
+  fetch(request: Request, env: Env, ctx: Context): Promise<Response> {
+    return handle(request, withDefaults(fetch), ctx, env.PHOTON_BUDGET)
   },
 }
 
 class BadRequest extends Error {}
+// Photon's budget is spent: ask again shortly.
+class Busy extends Error {}
+// Seconds the app waits before asking again (Retry-After).
+const BUSY_RETRY_AFTER = 1
 
 const json = (body: unknown, status = 200, maxAge?: number) =>
   Response.json(body, {
@@ -31,15 +39,25 @@ const json = (body: unknown, status = 200, maxAge?: number) =>
     headers: maxAge ? { 'Cache-Control': `public, max-age=${maxAge}` } : {},
   })
 
-export async function handle(request: Request, fetch: Fetch, ctx?: Context): Promise<Response> {
+export async function handle(
+  request: Request,
+  fetch: Fetch,
+  ctx?: Context,
+  photonBudget?: RateLimit,
+): Promise<Response> {
   const url = new URL(request.url)
   if (request.method !== 'GET') return json({ detail: 'method not allowed' }, 405)
   const route = ROUTES[url.pathname]
   if (!route) return json({ detail: 'not found' }, 404)
   try {
-    return await cached(request, ctx, () => route(url.searchParams, fetch))
+    return await cached(request, ctx, () => route(url.searchParams, fetch, photonBudget))
   } catch (error) {
     if (error instanceof BadRequest) return json({ detail: error.message }, 422)
+    if (error instanceof Busy)
+      return Response.json(
+        { detail: error.message },
+        { status: 429, headers: { 'Retry-After': String(BUSY_RETRY_AFTER) } },
+      )
     if (error instanceof GeocodingError) return json({ detail: error.message }, 502)
     return json({ detail: 'lookup is unavailable' }, 502)
   }
@@ -58,13 +76,29 @@ async function cached(request: Request, ctx: Context | undefined, answer: () => 
   return response
 }
 
-const ROUTES: Record<string, (params: URLSearchParams, fetch: Fetch) => Promise<Response>> = {
+// Photon's public server throttles an address that asks more than seven times a
+// second, and everyone's searches reach it from Cloudflare's. So each request
+// about to be made to it is counted against PHOTON_BUDGET (wrangler.jsonc), one
+// count shared by all visitors; over it the answer is a 429, and the app asks
+// again shortly (src/geocoder.ts). Answers from the cache cost nothing. Without
+// the binding (development, tests) nothing is counted.
+async function spendPhoton(budget: RateLimit | undefined, requests: number) {
+  if (!budget) return
+  const counted = await Promise.all(
+    Array.from({ length: requests }, () => budget.limit({ key: 'photon' })),
+  )
+  if (counted.some((count) => !count.success)) throw new Busy('place search is busy')
+}
+
+type Route = (params: URLSearchParams, fetch: Fetch, photonBudget?: RateLimit) => Promise<Response>
+
+const ROUTES: Record<string, Route> = {
   '/api/health': async () => json({ status: 'ok' }),
 
   // Places matching the query, split into those near the map view and the rest.
   // Each list holds GeoJSON features with a `distance_m` property (from the
   // view's centre) when a view is given.
-  '/api/search': async (params, fetch) => {
+  '/api/search': async (params, fetch, photonBudget) => {
     const q = text(params, 'q', { min: 1, max: 200 })!
     const limit = integer(params, 'limit', { min: 1, max: 10 }) ?? 6
     const bbox = text(params, 'bbox', { max: 100, optional: true })
@@ -75,14 +109,18 @@ const ROUTES: Record<string, (params: URLSearchParams, fetch: Fetch) => Promise<
     } catch (error) {
       throw new BadRequest((error as Error).message)
     }
+    // With a view Photon is asked twice: near it, and worldwide.
+    await spendPhoton(photonBudget, view ? 2 : 1)
     return json(await searchPlaces(fetch, q.trim(), { limit, view, lang }), 200, SEARCH_MAX_AGE)
   },
 
   // The address of a point on the map (a dropped pin), or null when unknown.
-  '/api/address': async (params, fetch) => {
+  '/api/address': async (params, fetch, photonBudget) => {
     const lat = number(params, 'lat', { min: -90, max: 90 })!
     const lon = number(params, 'lon', { min: -180, max: 180 })!
     const lang = text(params, 'lang', { max: 16, optional: true })
+    // Up to two requests: the street close by, else the town around.
+    await spendPhoton(photonBudget, 2)
     return json({ address: await addressAt(fetch, lon, lat, lang) }, 200, DAY)
   },
 

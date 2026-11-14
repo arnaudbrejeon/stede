@@ -8,5 +8,11 @@
     "directory": "./dist",
     "run_worker_first": ["/api/*"]
   },
-  "routes": [{ "pattern": "stede.cc", "custom_domain": true }]
+  "routes": [{ "pattern": "stede.cc", "custom_domain": true }],
+  // Requests to Photon, counted for all visitors together (worker/index.ts):
+  // its server allows an address seven a second, and Cloudflare counts over 10
+  // seconds, in each of its locations.
+  "ratelimits": [
+    { "name": "PHOTON_BUDGET", "namespace_id": "1001", "simple": { "limit": 70, "period": 10 } }
+  ]
 }

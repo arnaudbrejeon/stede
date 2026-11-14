@@ -71,6 +71,33 @@ describe('geocode', () => {
     expect(fetchMock).toHaveBeenCalledTimes(4)
   })
 
+  it('asks again when the backend is busy', async () => {
+    const busy = async () => new Response('', { status: 429, headers: { 'Retry-After': '0.01' } })
+    fetchMock.mockImplementationOnce(busy).mockImplementationOnce(busy)
+    expect(await geocode('tour eiffel')).toEqual(EMPTY)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('gives up when the backend stays busy', async () => {
+    fetchMock.mockImplementation(
+      async () => new Response('', { status: 429, headers: { 'Retry-After': '0.01' } }),
+    )
+    await expect(geocode('tour eiffel')).rejects.toThrow('429')
+    expect(fetchMock).toHaveBeenCalledTimes(4)
+  })
+
+  it('stops waiting when the search is dropped', async () => {
+    fetchMock.mockImplementation(
+      async () => new Response('', { status: 429, headers: { 'Retry-After': '60' } }),
+    )
+    const controller = new AbortController()
+    const pending = geocode('tour eiffel', { signal: controller.signal })
+    await Promise.resolve()
+    controller.abort()
+    await expect(pending).rejects.toThrow()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
   it('does not remember failures', async () => {
     fetchMock.mockImplementationOnce(async () => new Response('', { status: 502 }))
     await expect(geocode('tour eiffel')).rejects.toThrow('502')

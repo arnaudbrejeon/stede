@@ -19,6 +19,11 @@ export const VIEW_GRID = 0.01
 const SEARCH_CACHE_MAX = 200
 const searchCache = new Map<string, SearchResults>()
 
+// The backend answers 429 while everyone's searches together are at Photon's
+// limit (worker/index.ts): the request is made again after the pause it names,
+// this many times before giving up.
+const BUSY_RETRIES = 3
+
 export type PhotonProperties = {
   osm_id: number
   osm_type: string
@@ -58,11 +63,35 @@ export async function geocode(query: string, options: SearchOptions = {}): Promi
   const key = searchParams(query, options).toString()
   const hit = searchCache.get(key)
   if (hit) return hit
-  const response = await fetch(`${SEARCH_URL}?${key}`, { signal: options.signal })
+  const response = await fetchWhenFree(`${SEARCH_URL}?${key}`, options.signal)
   if (!response.ok) throw new Error(`Place search failed: ${response.status}`)
   const results: SearchResults = await response.json()
   remember(key, results)
   return results
+}
+
+async function fetchWhenFree(url: string, signal?: AbortSignal): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const response = await fetch(url, { signal })
+    if (response.status !== 429 || attempt === BUSY_RETRIES) return response
+    await pause((Number(response.headers.get('Retry-After')) || 1) * 1000, signal)
+  }
+}
+
+// Rejects as soon as the signal aborts, like fetch.
+function pause(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason)
+    const aborted = () => {
+      clearTimeout(timer)
+      reject(signal!.reason)
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', aborted)
+      resolve()
+    }, ms)
+    signal?.addEventListener('abort', aborted, { once: true })
+  })
 }
 
 function searchParams(query: string, options: SearchOptions): URLSearchParams {
@@ -110,7 +139,7 @@ export function clearSearchCache() {
 // when nothing is known around the point.
 export async function fetchAddress([lon, lat]: [number, number], signal?: AbortSignal): Promise<string | null> {
   const params = new URLSearchParams({ lat: lat.toFixed(6), lon: lon.toFixed(6), lang: navigator.language })
-  const response = await fetch(`/api/address?${params}`, { signal })
+  const response = await fetchWhenFree(`/api/address?${params}`, signal)
   if (!response.ok) throw new Error(`Address lookup failed: ${response.status}`)
   return (await response.json()).address
 }
