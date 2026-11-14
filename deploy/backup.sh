@@ -23,7 +23,15 @@ if [ "$events" -eq 0 ]; then
 fi
 
 name="strfry-$(date -u +%Y-%m-%dT%H%M%SZ).jsonl.gz"
-gsutil -q cp "$export_file" "gs://$BUCKET/$name"
+# Straight to the storage API as the VM's account: gsutil and gcloud first look
+# at what the bucket holds, which this account may not do.
+token="$(curl -fsS -m 10 -H 'Metadata-Flavor: Google' \
+  http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token |
+  sed -E 's/.*"access_token" *: *"([^"]+)".*/\1/')"
+curl -fsS -m 600 -o /dev/null -X POST \
+  -H "Authorization: Bearer $token" -H 'Content-Type: application/gzip' \
+  --data-binary "@$export_file" \
+  "https://storage.googleapis.com/upload/storage/v1/b/$BUCKET/o?uploadType=media&name=$name"
 echo "Backed up $events events to gs://$BUCKET/$name"
 
 # Optional (deploy/.env): an address to call after each backup, of a service
