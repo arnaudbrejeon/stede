@@ -2,23 +2,19 @@
 
 ## Live since 2026-10-18 (see docs/deploy.md)
 
-- **Back up the relay with exports to a bucket.**
-  A nightly `strfry export`, gzipped, to a Cloud Storage bucket in `stede-cc`
-  (us-central1), keeping 30 days. Restores with `strfry import`, into strfry or
-  any other relay. The VM needs write access to the bucket (a service account,
-  or the storage read-write scope). The daily disk snapshots were dropped
-  (2026-10-18), so until then there is no backup.
-
 - **Email alert on Google Cloud costs.** A budget of $1 a month on "My
   Billing Account" (`BILLING-ACCOUNT-ID`, the account `stede-cc` bills to),
   emailing me when spending passes it, so anything
   outside the free tier shows up early. `gcloud billing budgets create`
   (needs the Billing Budget API enabled).
 
-- **Rate-limit the API before sharing the app widely.** `/api/search` and
-  `/api/address` pass requests on to Photon's free, fair-use server; abuse
-  through stede.cc could get it blocked. Cloudflare's rate limiting can cap
-  requests per visitor.
+- **A limit on Photon requests that holds.** The API counts its requests to
+  Photon against a Cloudflare rate limit (70 per 10 s, all visitors together,
+  2026-11-14), but a test of 12 searches a second for 20 s was never refused
+  by it: Cloudflare counts loosely, on each of its machines. Photon then
+  refused the API for about three minutes (the app shows search as
+  unavailable). A single counter (a Durable Object) would hold; answering
+  Photon's own refusals as "busy", so the app asks again, would soften it.
 
 - **Check for package upgrades once a week.** Security fixes only reach the
   app when someone looks: `npm audit` in frontend/, `uvx pip-audit` on
@@ -91,7 +87,10 @@
 - Dependencies (2026-10-24): vite, certifi and the relay's Alpine packages
   taken past their advisories.
 - A place's details open it in Apple Maps or Google Maps (2026-10-24).
-- The relay's figures at stede.cc/stats (2026-10-25): private places, authors,
-  and a histogram of authors by their number of places, counted by the relay
-  itself through NIP-45 when the page opens, so nothing runs on the VM and
-  nothing is stored. Public, as the counts give nothing away.
+- The relay's figures at stede.cc/stats (2026-10-25): private places, counted
+  by the relay itself through NIP-45 when the page opens, so nothing runs on
+  the VM and nothing is stored (authors dropped 2026-11-14, when the relay
+  opened to every key).
+- The relay takes places from any key (2026-11-14).
+- Nightly backups of the relay to a Cloud Storage bucket, kept 30 days
+  (2026-11-14, see docs/deploy.md).
