@@ -102,6 +102,47 @@ gcloud compute ssh stede --zone us-central1-a --command 'cd stede && docker comp
 
 ## Backups
 
-Not set up yet (see `todo.md`): the relay's data lives in the `stede_relay-db`
-Docker volume on the VM, with no copy elsewhere. Your places are also in any
-export you made from the app.
+The relay's data lives in the `stede_relay-db` Docker volume on the VM's disk.
+It survives restarts of the relay and of the VM; the backups are for when the
+disk or the VM is lost, or the data is damaged (a flood of junk, a bad
+deletion).
+
+Each night (09:00 UTC) a timer on the VM runs `deploy/backup.sh`: every event,
+exported by strfry as JSON lines, gzipped, into the bucket
+`gs://<project>-relay-backups`, which deletes each file after 30 days. The VM
+runs as an account of its own (`stede-relay`) that may only add files to the
+bucket, not read, replace or delete them.
+
+Once, to make the bucket, the account and the timer (it stops the VM for a
+minute or two to change its account):
+
+```sh
+deploy/deploy.sh backup-setup
+deploy/deploy.sh backup        # a first backup now, and the latest ones listed
+```
+
+To hear when backups stop, put `STEDE_BACKUP_PING=<address>` in `deploy/.env`:
+the address a service such as healthchecks.io gives, called after each backup,
+which emails when a day goes by without a call. Then `deploy/deploy.sh relay`
+(it copies the file).
+
+### Restoring
+
+Into the relay as it is (events it already has are skipped), or into a new VM
+after `create`, `setup` and `relay`:
+
+```sh
+gsutil ls gs://stede-cc-relay-backups | tail -3        # pick one
+gsutil cat gs://stede-cc-relay-backups/strfry-<date>.jsonl.gz | gunzip |
+  gcloud compute ssh stede --zone us-central1-a --command \
+    'cd stede && docker compose -f deploy/compose.yml exec -T relay /app/strfry import'
+```
+
+To go back to an earlier state rather than add to the present one, empty the
+relay first: `docker compose -f deploy/compose.yml down`, `docker volume rm
+stede_relay-db`, `up -d`, then the import. What was written after the backup
+is lost: with the stede relay alone, the app drops the places the relay no
+longer has.
+
+The file is strfry's export, one signed event a line: `strfry import` takes it
+on any strfry, and other relays can be sent its events.

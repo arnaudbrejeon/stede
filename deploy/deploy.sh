@@ -5,6 +5,8 @@
 #   deploy/deploy.sh setup     # once: Docker and swap on the VM
 #   deploy/deploy.sh relay     # the relay: copy HEAD to the VM, rebuild, restart
 #   deploy/deploy.sh app       # the app and its API: build and upload to Cloudflare
+#   deploy/deploy.sh backup-setup   # once: the backup bucket, and the nightly backup on the VM
+#   deploy/deploy.sh backup    # back the relay up now, and list the latest backups
 #
 # gcloud runs with its own configuration ("stede" unless STEDE_GCLOUD_CONFIG
 # says otherwise), so the account and project active in your shell are never used.
@@ -16,6 +18,9 @@ VM="${STEDE_VM:-stede}"
 ZONE="${STEDE_ZONE:-us-central1-a}"
 REGION="${ZONE%-*}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# The relay's backups (deploy/backup.sh): the bucket, and how long it keeps them.
+BACKUP_DAYS=30
+backup_bucket() { echo "${STEDE_BACKUP_BUCKET:-$(gcloud config get-value project 2>/dev/null)-relay-backups}"; }
 
 on_vm() { gcloud compute ssh "$VM" --zone "$ZONE" --quiet --command "$1"; }
 
@@ -62,7 +67,66 @@ app() {
   (cd "$ROOT/frontend" && npm run deploy)
 }
 
+# The bucket, an account for the VM that may only add files to it, and the
+# timer that runs deploy/backup.sh each night. Safe to run again.
+backup_setup() {
+  local project bucket account lifecycle
+  project="$(gcloud config get-value project 2>/dev/null)"
+  bucket="$(backup_bucket)"
+  account="stede-relay@$project.iam.gserviceaccount.com"
+
+  # gsutil rather than `gcloud storage`, which doesn't start on every Python.
+  gsutil ls -b "gs://$bucket" >/dev/null 2>&1 ||
+    gsutil mb -l "$REGION" -b on --pap enforced "gs://$bucket"
+  lifecycle="$(mktemp)"
+  echo "{\"rule\": [{\"action\": {\"type\": \"Delete\"}, \"condition\": {\"age\": $BACKUP_DAYS}}]}" > "$lifecycle"
+  gsutil lifecycle set "$lifecycle" "gs://$bucket"
+  rm -f "$lifecycle"
+
+  gcloud iam service-accounts describe "$account" >/dev/null 2>&1 ||
+    gcloud iam service-accounts create stede-relay --display-name "The stede relay's VM"
+  gsutil iam ch "serviceAccount:$account:objectCreator" "gs://$bucket"
+
+  # A VM's account only changes while it is stopped: the relay is away a minute or two.
+  if [ "$(gcloud compute instances describe "$VM" --zone "$ZONE" --format 'value(serviceAccounts[0].email)')" != "$account" ]; then
+    gcloud compute instances stop "$VM" --zone "$ZONE"
+    gcloud compute instances set-service-account "$VM" --zone "$ZONE" \
+      --service-account "$account" --scopes cloud-platform
+    gcloud compute instances start "$VM" --zone "$ZONE"
+    until on_vm true 2>/dev/null; do sleep 5; done
+  fi
+
+  # As root, which may use Docker; deploy/.env may hold STEDE_BACKUP_PING.
+  on_vm "set -e
+    sudo tee /etc/systemd/system/stede-backup.service >/dev/null <<UNIT
+[Unit]
+Description=Back up the stede relay to gs://$bucket
+[Service]
+Type=oneshot
+Environment=HOME=/root STEDE_BACKUP_BUCKET=$bucket
+EnvironmentFile=-\$HOME/stede/deploy/.env
+ExecStart=\$HOME/stede/deploy/backup.sh
+UNIT
+    sudo tee /etc/systemd/system/stede-backup.timer >/dev/null <<UNIT
+[Unit]
+Description=Back up the stede relay each night
+[Timer]
+OnCalendar=*-*-* 09:00:00 UTC
+Persistent=true
+[Install]
+WantedBy=timers.target
+UNIT
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now stede-backup.timer"
+}
+
+backup() {
+  on_vm 'sudo systemctl start stede-backup.service; sudo journalctl -u stede-backup.service -n 3 --no-pager -o cat'
+  gsutil ls -l "gs://$(backup_bucket)" | tail -4
+}
+
 case "${1:-}" in
-  create | setup | relay | app) "$1" ;;
-  *) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  create | setup | relay | app | backup) "$1" ;;
+  backup-setup) backup_setup ;;
+  *) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac

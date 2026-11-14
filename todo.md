@@ -53,8 +53,6 @@
 
 ## Ideas, not decided
 
-- Remove `misc/chaucer.jpg` (a watermarked stock image; the about dialog uses
-  the public-domain Ellesmere portrait).
 - A dark interface to go with the Night map.
 - Editing a place's other OpenStreetMap details (opening hours, phone…), stored
   as your own overrides of the fetched data, as the website already is.
