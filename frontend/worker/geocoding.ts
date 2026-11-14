@@ -26,6 +26,9 @@ export type Feature = {
 
 // The provider failed or returned something unusable.
 export class GeocodingError extends Error {}
+// Photon is at its limit, by our count or by its own refusal (a 429): ask again
+// shortly.
+export class Busy extends GeocodingError {}
 
 // The visible map area, in degrees.
 export class View {
@@ -113,6 +116,8 @@ export async function searchPlaces(
     photon(fetch, { ...common, limit: limit * 2, lat: round(lat, 5), lon: round(lon, 5) }),
   ])
   if (local.status === 'rejected' && worldwide.status === 'rejected') {
+    if (local.reason instanceof Busy || worldwide.reason instanceof Busy)
+      throw new Busy('place search is busy')
     throw new GeocodingError('place search is unavailable')
   }
 
@@ -182,9 +187,11 @@ async function photon(fetch: Fetch, params: Params, url = PHOTON_URL): Promise<F
   let data: { type?: string; features?: Feature[] }
   try {
     const response = await fetch(`${url}?${search}`)
+    if (response.status === 429) throw new Busy('place search is busy')
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     data = await response.json()
-  } catch {
+  } catch (error) {
+    if (error instanceof Busy) throw error
     throw new GeocodingError('place search is unavailable')
   }
   if (data?.type !== 'FeatureCollection')

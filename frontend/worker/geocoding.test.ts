@@ -149,6 +149,20 @@ describe("Photon's budget", () => {
     const request = new Request('https://stede.cc/api/address?lat=1&lon=1')
     expect((await handle(request, fetch, undefined, budgetOf(0))).status).toBe(429)
   })
+
+  it('answers 429 when Photon itself refuses', async () => {
+    const refusing = fakeFetch(() => new Response('', { status: 429 }))
+    const response = await handle(new Request(searchUrl), refusing)
+    expect(response.status).toBe(429)
+    expect(response.headers.get('Retry-After')).toBe('1')
+    const address = new Request('https://stede.cc/api/address?lat=1&lon=1')
+    expect((await handle(address, refusing)).status).toBe(429)
+  })
+
+  it('answers 502 for any other failure of Photon', async () => {
+    const failing = fakeFetch(() => new Response('', { status: 500 }))
+    expect((await handle(new Request(searchUrl), failing)).status).toBe(502)
+  })
 })
 
 describe('/api/address', () => {

@@ -13,8 +13,8 @@
   2026-11-14), but a test of 12 searches a second for 20 s was never refused
   by it: Cloudflare counts loosely, on each of its machines. Photon then
   refused the API for about three minutes (the app shows search as
-  unavailable). A single counter (a Durable Object) would hold; answering
-  Photon's own refusals as "busy", so the app asks again, would soften it.
+  unavailable). A single counter (a Durable Object) would hold. Until then
+  Photon's own refusals are answered as "busy", so the app asks again.
 
 - **Check for package upgrades once a week.** Security fixes only reach the
   app when someone looks: `npm audit` in frontend/, `uvx pip-audit` on

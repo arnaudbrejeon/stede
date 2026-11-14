@@ -2,7 +2,7 @@
 // directly; this worker answers /api/* (see wrangler.jsonc). In development the
 // Vite dev server runs it for /api too (vite.config.ts).
 
-import { addressAt, GeocodingError, searchPlaces, View } from './geocoding'
+import { addressAt, Busy, GeocodingError, searchPlaces, View } from './geocoding'
 import { withDefaults, type Fetch } from './http'
 import { OSM_TYPES, type OsmType } from './osm'
 import { findPlaceImage } from './placeImage'
@@ -28,8 +28,6 @@ export default {
 }
 
 class BadRequest extends Error {}
-// Photon's budget is spent: ask again shortly.
-class Busy extends Error {}
 // Seconds the app waits before asking again (Retry-After).
 const BUSY_RETRY_AFTER = 1
 
@@ -80,7 +78,8 @@ async function cached(request: Request, ctx: Context | undefined, answer: () => 
 // second, and everyone's searches reach it from Cloudflare's. So each request
 // about to be made to it is counted against PHOTON_BUDGET (wrangler.jsonc), one
 // count shared by all visitors; over it the answer is a 429, and the app asks
-// again shortly (src/geocoder.ts). Answers from the cache cost nothing. Without
+// again shortly (src/geocoder.ts), as it does when Photon itself refuses (a
+// 429 there). Answers from the cache cost nothing. Without
 // the binding (development, tests) nothing is counted.
 async function spendPhoton(budget: RateLimit | undefined, requests: number) {
   if (!budget) return
