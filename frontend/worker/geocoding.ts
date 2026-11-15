@@ -10,6 +10,9 @@ import { distanceM, type Fetch } from './http'
 
 const PHOTON_URL = 'https://photon.komoot.io/api/'
 const PHOTON_REVERSE_URL = 'https://photon.komoot.io/reverse'
+// Photon's free server can take ten seconds at busy times: longer than other
+// lookups are given (http.ts), since a late answer beats none.
+const PHOTON_TIMEOUT_MS = 15_000
 // A street or house within this many kilometres of a dropped pin is its address;
 // further out (a mountain, a beach) the pin is described by the nearest town.
 const ADDRESS_RADIUS_KM = 0.3
@@ -186,9 +189,15 @@ async function photon(fetch: Fetch, params: Params, url = PHOTON_URL): Promise<F
   }
   let data: { type?: string; features?: Feature[] }
   try {
-    const response = await fetch(`${url}?${search}`)
+    const response = await fetch(`${url}?${search}`, {
+      signal: AbortSignal.timeout(PHOTON_TIMEOUT_MS),
+    })
     if (response.status === 429) throw new Busy('place search is busy')
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    if (!response.ok) {
+      // Shown by `wrangler tail`: why Photon refused.
+      console.warn(`Photon answered ${response.status}: ${(await response.text()).slice(0, 300)}`)
+      throw new Error(`HTTP ${response.status}`)
+    }
     data = await response.json()
   } catch (error) {
     if (error instanceof Busy) throw error
