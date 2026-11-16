@@ -1,10 +1,14 @@
 import type { Feature, Point } from 'geojson'
+import { addressAt, searchPlaces, View } from '../worker/geocoding'
+import type { Fetch } from '../worker/http'
 
-// Place search through our backend (/api/search), which proxies Photon
-// (OpenStreetMap data) and splits results into those near the map view and the
-// rest. Photon's public instance is fair-use only, so callers still debounce and
-// cancel requests, and repeats are answered from caches here and in the browser
-// (the backend's Cache-Control) rather than asked again.
+// Place search: Photon (OpenStreetMap data) asked by the browser itself, with
+// results split into those near the map view and the rest (worker/geocoding.ts).
+// Photon's public instance is fair-use only and counts by address, so asked from
+// here each visitor has an allowance of their own; callers still debounce and
+// cancel requests, and repeats are answered from this session's cache. When
+// Photon can't be asked from here, our backend asks it instead (/api/search,
+// the same code).
 const SEARCH_URL = '/api/search'
 
 // Views are snapped outward to this grid (degrees, about 1 km) before they go
@@ -19,9 +23,9 @@ export const VIEW_GRID = 0.01
 const SEARCH_CACHE_MAX = 200
 const searchCache = new Map<string, SearchResults>()
 
-// The backend answers 429 while everyone's searches together are at Photon's
-// limit (worker/index.ts): the request is made again after the pause it names,
-// this many times before giving up.
+// The backend answers 429 while the searches it makes for everyone are at
+// Photon's limit (worker/index.ts): the request is made again after the pause it
+// names, this many times before giving up.
 const BUSY_RETRIES = 3
 
 export type PhotonProperties = {
@@ -42,7 +46,7 @@ export type PhotonProperties = {
   countrycode?: string
   // [minLon, maxLat, maxLon, minLat]
   extent?: [number, number, number, number]
-  // From the centre of the view searched from (added by our backend).
+  // From the centre of the view searched from (added by worker/geocoding.ts).
   distance_m?: number
 }
 
@@ -60,14 +64,52 @@ type SearchOptions = {
 }
 
 export async function geocode(query: string, options: SearchOptions = {}): Promise<SearchResults> {
-  const key = searchParams(query, options).toString()
+  const params = searchParams(query, options)
+  const key = params.toString()
   const hit = searchCache.get(key)
   if (hit) return hit
-  const response = await fetchWhenFree(`${SEARCH_URL}?${key}`, options.signal)
-  if (!response.ok) throw new Error(`Place search failed: ${response.status}`)
-  const results: SearchResults = await response.json()
+  const bbox = params.get('bbox')
+  const results = await orFromBackend(
+    options.signal,
+    `${SEARCH_URL}?${key}`,
+    'Place search',
+    (fetch) =>
+      searchPlaces(fetch, query.trim(), {
+        limit: Number(params.get('limit')),
+        view: bbox ? View.parse(bbox) : undefined,
+        lang: navigator.language,
+      }) as Promise<unknown> as Promise<SearchResults>,
+  )
   remember(key, results)
   return results
+}
+
+// What `direct` answers, asking Photon from the browser; when that fails, what
+// our backend answers at `url`.
+async function orFromBackend<T>(
+  signal: AbortSignal | undefined,
+  url: string,
+  what: string,
+  direct: (fetch: Fetch) => Promise<T>,
+): Promise<T> {
+  try {
+    return await direct(droppedWith(signal))
+  } catch (error) {
+    if (signal?.aborted) throw signal.reason
+    console.warn(`${what}: asking the backend, as Photon gave no answer`, error)
+  }
+  const response = await fetchWhenFree(url, signal)
+  if (!response.ok) throw new Error(`${what} failed: ${response.status}`)
+  return response.json()
+}
+
+// fetch, given up as soon as the caller's signal aborts, as well as on the
+// request's own (worker/geocoding.ts sets a timeout).
+function droppedWith(signal?: AbortSignal): Fetch {
+  return (input, init = {}) => {
+    const signals = [signal, init.signal].filter((s): s is AbortSignal => !!s)
+    return fetch(input, { ...init, signal: signals.length > 1 ? AbortSignal.any(signals) : signals[0] })
+  }
 }
 
 async function fetchWhenFree(url: string, signal?: AbortSignal): Promise<Response> {
@@ -139,9 +181,12 @@ export function clearSearchCache() {
 // when nothing is known around the point.
 export async function fetchAddress([lon, lat]: [number, number], signal?: AbortSignal): Promise<string | null> {
   const params = new URLSearchParams({ lat: lat.toFixed(6), lon: lon.toFixed(6), lang: navigator.language })
-  const response = await fetchWhenFree(`/api/address?${params}`, signal)
-  if (!response.ok) throw new Error(`Address lookup failed: ${response.status}`)
-  return (await response.json()).address
+  return orFromBackend(
+    signal,
+    `/api/address?${params}`,
+    'Address lookup',
+    async (fetch) => ({ address: await addressAt(fetch, lon, lat, navigator.language) }),
+  ).then((answer) => answer.address)
 }
 
 // "Tour Eiffel" / "5 Avenue Anatole France, Paris, France"
