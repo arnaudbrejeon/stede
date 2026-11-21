@@ -22,6 +22,8 @@ export function ResultDetails({ result, onBack, onSaved, allLabels, tagColors }:
   const p = result.properties
   const coordinates = result.geometry.coordinates as [number, number]
   const { tags, failed, image, website } = useOsmDetails(p.osm_type, p.osm_id, coordinates)
+  // Photon's name to start with, which you can change before saving.
+  const [name, setName] = useState(() => resultTitle(p))
   const [fields, setFields] = useState(NO_USER_FIELDS)
 
   return (
@@ -42,6 +44,13 @@ export function ResultDetails({ result, onBack, onSaved, allLabels, tagColors }:
         where={{ lngLat: coordinates, countryCode: p.countrycode }}
       />
 
+      <div className="place-fields">
+        <label className="field">
+          Name
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+      </div>
+
       <PlaceFields
         value={fields}
         onChange={setFields}
@@ -53,16 +62,20 @@ export function ResultDetails({ result, onBack, onSaved, allLabels, tagColors }:
       />
 
       <SavePlaceButton
-        draft={{
-          name: resultTitle(p),
-          lngLat: coordinates,
-          osmKey: p.osm_key,
-          osmValue: p.osm_value,
-          osmType: p.osm_type,
-          osmId: p.osm_id,
-          address: streetAddress(p),
-          ...fields,
-        }}
+        draft={
+          name.trim()
+            ? {
+                name,
+                lngLat: coordinates,
+                osmKey: p.osm_key,
+                osmValue: p.osm_value,
+                osmType: p.osm_type,
+                osmId: p.osm_id,
+                address: streetAddress(p),
+                ...fields,
+              }
+            : null
+        }
         onSaved={onSaved}
       />
     </div>
