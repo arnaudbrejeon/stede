@@ -89,3 +89,16 @@ body,
   color: var(--muted);
   cursor: default;
 }
+.stats h2 {
+  margin: 40px 0 6px;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 400;
+  color: var(--brand);
+}
+.stat-warning {
+  border-color: var(--rubric);
+}
+.stat-warning strong {
+  color: var(--rubric);
+}

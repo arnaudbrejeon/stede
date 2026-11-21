@@ -131,14 +131,18 @@ describe("Photon's budget", () => {
 
   it('answers while the budget lasts', async () => {
     const fetch = photonReturning([TOWER], [])
-    const response = await handle(new Request(searchUrl), fetch, undefined, budgetOf(2))
+    const response = await handle(new Request(searchUrl), fetch, undefined, {
+      PHOTON_BUDGET: budgetOf(2),
+    })
     expect(response.status).toBe(200)
   })
 
   it('answers 429 without asking Photon once it is spent', async () => {
     const fetch = photonReturning([TOWER], [])
     // A search with a view needs two requests.
-    const response = await handle(new Request(searchUrl), fetch, undefined, budgetOf(1))
+    const response = await handle(new Request(searchUrl), fetch, undefined, {
+      PHOTON_BUDGET: budgetOf(1),
+    })
     expect(response.status).toBe(429)
     expect(response.headers.get('Retry-After')).toBe('1')
     expect(fetch.calls).toHaveLength(0)
@@ -147,7 +151,8 @@ describe("Photon's budget", () => {
   it('covers address lookups too', async () => {
     const fetch = photonReturning([], [])
     const request = new Request('https://stede.cc/api/address?lat=1&lon=1')
-    expect((await handle(request, fetch, undefined, budgetOf(0))).status).toBe(429)
+    const response = await handle(request, fetch, undefined, { PHOTON_BUDGET: budgetOf(0) })
+    expect(response.status).toBe(429)
   })
 
   it('answers 429 when Photon itself refuses', async () => {

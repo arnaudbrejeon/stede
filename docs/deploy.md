@@ -126,6 +126,14 @@ the address a service such as healthchecks.io gives, called after each backup,
 which emails when a day goes by without a call. Then `deploy/deploy.sh relay`
 (it copies the file).
 
+`https://stede.cc/stats` shows the latest backup and when the next is due. The
+worker reads the bucket as an account that may only read it, whose key is the
+worker's secret `BACKUP_READER_KEY`. Once, after `backup-setup`:
+
+```sh
+deploy/deploy.sh backup-status-setup   # again later to replace the key
+```
+
 ### Restoring
 
 Into the relay as it is (events it already has are skipped), or into a new VM

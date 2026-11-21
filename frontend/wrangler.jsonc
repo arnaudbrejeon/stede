@@ -12,6 +12,10 @@
   // Requests to Photon, counted for all visitors together (worker/index.ts):
   // its server allows an address seven a second, and Cloudflare counts over 10
   // seconds, in each of its locations.
+  // The relay's backups, read for the stats page (worker/backups.ts); the key of
+  // the account that reads them is the secret BACKUP_READER_KEY
+  // (`deploy/deploy.sh backup-status-setup`).
+  "vars": { "BACKUP_BUCKET": "stede-cc-relay-backups" },
   "ratelimits": [
     { "name": "PHOTON_BUDGET", "namespace_id": "1001", "simple": { "limit": 70, "period": 10 } }
   ]

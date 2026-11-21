@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { fetchRelayStats, PRIVATE_PLACE_KIND, type RelayStats as Stats } from '../relayStats'
+import {
+  fetchBackupStatus,
+  fetchRelayStats,
+  PRIVATE_PLACE_KIND,
+  type BackupStatus,
+  type RelayStats as Stats,
+} from '../relayStats'
 import { RELAY_URL } from '../relayUrl'
 import { Logo } from './Logo'
 
 const RELAY_HOST = new URL(RELAY_URL).host
+// Backups are nightly: one older than this means a night was missed.
+const OVERDUE_MS = 26 * 3600 * 1000
 
 type State = { stats?: Stats; error?: string; counting: boolean }
 
@@ -25,6 +33,12 @@ export function RelayStats() {
     )
   }, [])
   useEffect(count, [count])
+
+  // undefined while asking, null when the backups can't be told.
+  const [backups, setBackups] = useState<BackupStatus | null>()
+  useEffect(() => {
+    fetchBackupStatus().then(setBackups, () => setBackups(null))
+  }, [])
   const countAgain = () => {
     setState((s) => ({ ...s, error: undefined, counting: true }))
     count()
@@ -63,6 +77,13 @@ export function RelayStats() {
         )}
       </p>
       <p className="stats-note">The count comes from the relay's own index (NIP-45).</p>
+
+      <h2>Backups</h2>
+      <p className="stats-lead">
+        Every night the relay's events are copied to Google Cloud Storage, and kept 30 days.
+      </p>
+      {backups === null && <p className="stats-error">The backups could not be checked.</p>}
+      <BackupFigures backups={backups} />
     </main>
   )
 }
@@ -70,3 +91,52 @@ export function RelayStats() {
 function errorMessage(error: unknown): string {
   return error instanceof Error && error.message ? error.message : 'the relay could not be reached'
 }
+
+function BackupFigures({ backups }: { backups: BackupStatus | null | undefined }) {
+  if (backups === null) return null
+  const latest = backups?.latest
+  const overdue = !!backups && (!latest || backups.at.getTime() - latest.at.getTime() > OVERDUE_MS)
+  return (
+    <section className="stats-figures" aria-busy={backups === undefined}>
+      <div className={overdue ? 'stat stat-warning' : 'stat'}>
+        <strong>{backups ? (latest ? ago(latest.at, backups.at) : 'None yet') : '…'}</strong>
+        <span>
+          latest backup
+          {latest && (
+            <>
+              , {when(latest.at)}, {megabytes(latest.bytes)}
+            </>
+          )}
+          {overdue && latest && ' — a night was missed'}
+        </span>
+      </div>
+      <div className="stat">
+        <strong>{backups ? `in ${hours(backups.next.getTime() - backups.at.getTime())}` : '…'}</strong>
+        <span>next backup{backups && <>, {when(backups.next)}</>}</span>
+      </div>
+      <div className="stat">
+        <strong>{backups ? backups.kept : '…'}</strong>
+        <span>backups kept</span>
+      </div>
+    </section>
+  )
+}
+
+const when = (date: Date) =>
+  date.toLocaleString([], {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
+const ago = (date: Date, now: Date) => `${hours(now.getTime() - date.getTime())} ago`
+
+function hours(ms: number): string {
+  const h = Math.round(ms / 3600_000)
+  if (h < 1) return `${Math.max(1, Math.round(ms / 60_000))} min`
+  return h < 48 ? `${h} h` : `${Math.round(h / 24)} days`
+}
+
+const megabytes = (bytes: number) => `${(bytes / 1_000_000).toFixed(1)} MB`

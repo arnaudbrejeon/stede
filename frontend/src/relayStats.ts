@@ -27,3 +27,29 @@ export async function fetchRelayStats(url: string): Promise<RelayStats> {
   ])
   return { events, at: new Date() }
 }
+
+// The relay's backups, from the worker (worker/backups.ts), which reads the
+// backup bucket. Null when the worker can't tell.
+export type BackupStatus = {
+  latest: { at: Date; bytes: number } | null
+  kept: number
+  next: Date
+  // When this was asked.
+  at: Date
+}
+
+export async function fetchBackupStatus(): Promise<BackupStatus | null> {
+  const response = await fetch('/api/backups')
+  if (!response.ok) return null
+  const body = (await response.json()) as {
+    latest: { at: string; bytes: number } | null
+    kept: number
+    next: string
+  }
+  return {
+    latest: body.latest && { at: new Date(body.latest.at), bytes: body.latest.bytes },
+    kept: body.kept,
+    next: new Date(body.next),
+    at: new Date(),
+  }
+}

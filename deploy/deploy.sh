@@ -7,6 +7,7 @@
 #   deploy/deploy.sh app       # the app and its API: build and upload to Cloudflare
 #   deploy/deploy.sh backup-setup   # once: the backup bucket, and the nightly backup on the VM
 #   deploy/deploy.sh backup    # back the relay up now, and list the latest backups
+#   deploy/deploy.sh backup-status-setup   # once: let the stats page read the backups
 #
 # gcloud runs with its own configuration ("stede" unless STEDE_GCLOUD_CONFIG
 # says otherwise), so the account and project active in your shell are never used.
@@ -120,6 +121,35 @@ UNIT
     sudo systemctl enable --now stede-backup.timer"
 }
 
+# An account that may only read the backup bucket, for the worker behind
+# stede.cc/stats (worker/backups.ts), and its key as the worker's secret
+# BACKUP_READER_KEY. Running it again makes a new key and deletes the old ones.
+backup_status_setup() {
+  local project bucket account key old
+  project="$(gcloud config get-value project 2>/dev/null)"
+  bucket="$(backup_bucket)"
+  account="stede-backup-reader@$project.iam.gserviceaccount.com"
+
+  gcloud iam service-accounts describe "$account" >/dev/null 2>&1 ||
+    gcloud iam service-accounts create stede-backup-reader \
+      --display-name "Reads the relay's backups for stede.cc/stats"
+  # A new account takes a few seconds to be known to Cloud Storage.
+  for try in 1 2 3 4 5 6; do
+    gsutil iam ch "serviceAccount:$account:objectViewer" "gs://$bucket" && break
+    [ "$try" = 6 ] && return 1
+    sleep 10
+  done
+
+  old="$(gcloud iam service-accounts keys list --iam-account "$account" --managed-by user --format 'value(name.basename())')"
+  key="$(mktemp)"
+  trap 'rm -f "$key"' RETURN
+  gcloud iam service-accounts keys create "$key" --iam-account "$account"
+  (cd "$ROOT/frontend" && npx wrangler@4 secret put BACKUP_READER_KEY < "$key")
+  for id in $old; do
+    gcloud iam service-accounts keys delete "$id" --iam-account "$account" --quiet
+  done
+}
+
 backup() {
   on_vm 'sudo systemctl start stede-backup.service; sudo journalctl -u stede-backup.service -n 3 --no-pager -o cat'
   gsutil ls -l "gs://$(backup_bucket)" | tail -4
@@ -128,5 +158,6 @@ backup() {
 case "${1:-}" in
   create | setup | relay | app | backup) "$1" ;;
   backup-setup) backup_setup ;;
-  *) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  backup-status-setup) backup_status_setup ;;
+  *) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac

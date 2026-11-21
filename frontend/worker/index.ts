@@ -2,6 +2,7 @@
 // directly; this worker answers /api/* (see wrangler.jsonc). In development the
 // Vite dev server runs it for /api too (vite.config.ts).
 
+import { backupStatus } from './backups'
 import { addressAt, Busy, GeocodingError, searchPlaces, View } from './geocoding'
 import { withDefaults, type Fetch } from './http'
 import { OSM_TYPES, type OsmType } from './osm'
@@ -13,17 +14,24 @@ type Context = { waitUntil(promise: Promise<unknown>): void }
 // A Cloudflare rate limit (wrangler.jsonc): counts each call for a key, and says
 // no once the key is over its limit.
 type RateLimit = { limit(options: { key: string }): Promise<{ success: boolean }> }
-type Env = { PHOTON_BUDGET?: RateLimit }
+export type Env = {
+  PHOTON_BUDGET?: RateLimit
+  // The relay's backups (worker/backups.ts): the bucket, and the key of the
+  // account that may read it (a secret). Without them /api/backups says so.
+  BACKUP_BUCKET?: string
+  BACKUP_READER_KEY?: string
+}
 
 // How long Cloudflare (and browsers) may keep each kind of answer.
 const DAY = 86400
 const SEARCH_MAX_AGE = 3600
 // Finding nothing may be a passing failure: ask again sooner.
 const EMPTY_MAX_AGE = 600
+const BACKUPS_MAX_AGE = 300
 
 export default {
   fetch(request: Request, env: Env, ctx: Context): Promise<Response> {
-    return handle(request, withDefaults(fetch), ctx, env.PHOTON_BUDGET)
+    return handle(request, withDefaults(fetch), ctx, env)
   },
 }
 
@@ -41,14 +49,14 @@ export async function handle(
   request: Request,
   fetch: Fetch,
   ctx?: Context,
-  photonBudget?: RateLimit,
+  env: Env = {},
 ): Promise<Response> {
   const url = new URL(request.url)
   if (request.method !== 'GET') return json({ detail: 'method not allowed' }, 405)
   const route = ROUTES[url.pathname]
   if (!route) return json({ detail: 'not found' }, 404)
   try {
-    return await cached(request, ctx, () => route(url.searchParams, fetch, photonBudget))
+    return await cached(request, ctx, () => route(url.searchParams, fetch, env))
   } catch (error) {
     if (error instanceof BadRequest) return json({ detail: error.message }, 422)
     if (error instanceof Busy)
@@ -89,15 +97,23 @@ async function spendPhoton(budget: RateLimit | undefined, requests: number) {
   if (counted.some((count) => !count.success)) throw new Busy('place search is busy')
 }
 
-type Route = (params: URLSearchParams, fetch: Fetch, photonBudget?: RateLimit) => Promise<Response>
+type Route = (params: URLSearchParams, fetch: Fetch, env: Env) => Promise<Response>
 
 const ROUTES: Record<string, Route> = {
   '/api/health': async () => json({ status: 'ok' }),
 
+  // The relay's latest backup and when the next is due, for the stats page.
+  '/api/backups': async (_params, fetch, env) => {
+    if (!env.BACKUP_BUCKET || !env.BACKUP_READER_KEY)
+      return json({ detail: 'backups are not configured' }, 503)
+    const backups = await backupStatus(fetch, env.BACKUP_BUCKET, env.BACKUP_READER_KEY)
+    return json(backups, 200, BACKUPS_MAX_AGE)
+  },
+
   // Places matching the query, split into those near the map view and the rest.
   // Each list holds GeoJSON features with a `distance_m` property (from the
   // view's centre) when a view is given.
-  '/api/search': async (params, fetch, photonBudget) => {
+  '/api/search': async (params, fetch, { PHOTON_BUDGET: photonBudget }) => {
     const q = text(params, 'q', { min: 1, max: 200 })!
     const limit = integer(params, 'limit', { min: 1, max: 10 }) ?? 6
     const bbox = text(params, 'bbox', { max: 100, optional: true })
@@ -114,7 +130,7 @@ const ROUTES: Record<string, Route> = {
   },
 
   // The address of a point on the map (a dropped pin), or null when unknown.
-  '/api/address': async (params, fetch, photonBudget) => {
+  '/api/address': async (params, fetch, { PHOTON_BUDGET: photonBudget }) => {
     const lat = number(params, 'lat', { min: -90, max: 90 })!
     const lon = number(params, 'lon', { min: -180, max: 180 })!
     const lang = text(params, 'lang', { max: 16, optional: true })
