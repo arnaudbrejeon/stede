@@ -64,6 +64,12 @@ export function RelayStats() {
           <strong>{stats ? stats.events.toLocaleString() : '…'}</strong>
           <span>private places (kind {PRIVATE_PLACE_KIND} events)</span>
         </div>
+        {backups?.latest?.authors !== undefined && (
+          <div className="stat">
+            <strong>{backups.latest.authors.toLocaleString()}</strong>
+            <span>people with private places, at the latest backup</span>
+          </div>
+        )}
       </section>
       <p className="stats-foot">
         {stats && (
@@ -76,7 +82,10 @@ export function RelayStats() {
           </>
         )}
       </p>
-      <p className="stats-note">The count comes from the relay's own index (NIP-45).</p>
+      <p className="stats-note">
+        The count comes from the relay's own index (NIP-45), which can't tell whose the events
+        are: people are counted each night, when the relay is backed up.
+      </p>
 
       <h2>Backups</h2>
       <p className="stats-lead">

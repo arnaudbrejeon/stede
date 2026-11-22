@@ -24,10 +24,11 @@ async function serviceAccountKey() {
   })
 }
 
-const object = (day: number, size: number) => ({
+const object = (day: number, size: number, metadata?: Record<string, string>) => ({
   name: `strfry-2026-11-${day}T090026Z.jsonl.gz`,
   size: String(size),
   timeCreated: `2026-11-${day}T09:00:26.000Z`,
+  ...(metadata && { metadata }),
 })
 
 function google(items: object[] | undefined) {
@@ -57,6 +58,17 @@ describe('backupStatus', () => {
       next: '2026-11-22T09:00:00.000Z',
     })
     expect(fetch.calls[1].pathname).toBe('/storage/v1/b/stede-cc-relay-backups/o')
+  })
+
+  it('gives the counts the backup made', async () => {
+    const fetch = google([object(20, 100), object(21, 120, { events: '18431', authors: '12' })])
+    const status = await backupStatus(fetch, 'b', await serviceAccountKey())
+    expect(status.latest).toEqual({
+      at: '2026-11-21T09:00:26.000Z',
+      bytes: 120,
+      events: 18431,
+      authors: 12,
+    })
   })
 
   it('says when there is none yet', async () => {

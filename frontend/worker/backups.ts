@@ -9,7 +9,9 @@ import type { Fetch } from './http'
 export const BACKUP_HOUR_UTC = 9
 
 export type Backups = {
-  latest: { at: string; bytes: number } | null
+  // `events` and `authors` (people with private places) were counted by the
+  // backup; older backups don't have them.
+  latest: { at: string; bytes: number; events?: number; authors?: number } | null
   // Backups the bucket keeps (it deletes each after 30 days).
   kept: number
   next: string
@@ -18,7 +20,12 @@ export type Backups = {
 // A Google service account key, as `gcloud iam service-accounts keys create` writes it.
 type ServiceAccountKey = { client_email: string; private_key: string; token_uri?: string }
 
-type StorageObject = { name: string; size: string; timeCreated: string }
+type StorageObject = {
+  name: string
+  size: string
+  timeCreated: string
+  metadata?: { events?: string; authors?: string }
+}
 
 export async function backupStatus(
   fetch: Fetch,
@@ -27,7 +34,10 @@ export async function backupStatus(
   now = new Date(),
 ): Promise<Backups> {
   const token = await accessToken(fetch, JSON.parse(keyJson) as ServiceAccountKey, now)
-  const query = new URLSearchParams({ prefix: 'strfry-', fields: 'items(name,size,timeCreated)' })
+  const query = new URLSearchParams({
+    prefix: 'strfry-',
+    fields: 'items(name,size,timeCreated,metadata)',
+  })
   const response = await fetch(
     `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucket)}/o?${query}`,
     { headers: { Authorization: `Bearer ${token}` } },
@@ -40,10 +50,20 @@ export async function backupStatus(
     null,
   )
   return {
-    latest: newest && { at: newest.timeCreated, bytes: Number(newest.size) },
+    latest: newest && {
+      at: newest.timeCreated,
+      bytes: Number(newest.size),
+      ...counted('events', newest.metadata?.events),
+      ...counted('authors', newest.metadata?.authors),
+    },
     kept: items.length,
     next: nextBackup(now).toISOString(),
   }
+}
+
+function counted(name: string, value: string | undefined) {
+  const count = Number(value)
+  return value && Number.isInteger(count) ? { [name]: count } : {}
 }
 
 export function nextBackup(now: Date): Date {

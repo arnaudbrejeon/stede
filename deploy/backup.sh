@@ -21,18 +21,33 @@ if [ "$events" -eq 0 ]; then
   echo "The export is empty: not uploaded." >&2
   exit 1
 fi
+# The people with private places, which the stats page shows (the relay can
+# only count events).
+authors="$(gzip -dc "$export_file" | jq -r 'select(.kind == 31301) | .pubkey' | sort -u | wc -l)"
 
 name="strfry-$(date -u +%Y-%m-%dT%H%M%SZ).jsonl.gz"
+# One request holding the file and its metadata (the counts), as Cloud Storage's
+# multipart upload wants them.
+boundary="stede-backup-$RANDOM$RANDOM"
+body="$(mktemp)"
+trap 'rm -f "$export_file" "$body"' EXIT
+{
+  printf -- '--%s\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' "$boundary"
+  printf '{"name": "%s", "metadata": {"events": "%d", "authors": "%d"}}\r\n' "$name" "$events" "$authors"
+  printf -- '--%s\r\nContent-Type: application/gzip\r\n\r\n' "$boundary"
+  cat "$export_file"
+  printf -- '\r\n--%s--\r\n' "$boundary"
+} > "$body"
 # Straight to the storage API as the VM's account: gsutil and gcloud first look
 # at what the bucket holds, which this account may not do.
 token="$(curl -fsS -m 10 -H 'Metadata-Flavor: Google' \
   http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token |
   sed -E 's/.*"access_token" *: *"([^"]+)".*/\1/')"
 curl -fsS -m 600 -o /dev/null -X POST \
-  -H "Authorization: Bearer $token" -H 'Content-Type: application/gzip' \
-  --data-binary "@$export_file" \
-  "https://storage.googleapis.com/upload/storage/v1/b/$BUCKET/o?uploadType=media&name=$name"
-echo "Backed up $events events to gs://$BUCKET/$name"
+  -H "Authorization: Bearer $token" -H "Content-Type: multipart/related; boundary=$boundary" \
+  --data-binary "@$body" \
+  "https://storage.googleapis.com/upload/storage/v1/b/$BUCKET/o?uploadType=multipart"
+echo "Backed up $events events, from $authors people, to gs://$BUCKET/$name"
 
 # Optional (deploy/.env): an address to call after each backup, of a service
 # that sends an email when the calls stop.

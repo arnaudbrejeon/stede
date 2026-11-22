@@ -2,8 +2,8 @@ import { SimplePool } from 'nostr-tools/pool'
 
 // The relay's figures, asked of the relay itself: strfry answers NIP-45 COUNT
 // requests from its index, so nothing is stored or scheduled and the numbers
-// are those of the moment. A count can't say whose the events are, and anyone
-// may write, so there is no figure for authors.
+// are those of the moment. A count can't say whose the events are: the people
+// with private places are counted by the nightly backup (deploy/backup.sh).
 
 // The one kind the relay holds today: private places (see relay/policy.py).
 export const PRIVATE_PLACE_KIND = 31301
@@ -31,7 +31,8 @@ export async function fetchRelayStats(url: string): Promise<RelayStats> {
 // The relay's backups, from the worker (worker/backups.ts), which reads the
 // backup bucket. Null when the worker can't tell.
 export type BackupStatus = {
-  latest: { at: Date; bytes: number } | null
+  // `authors`: people with private places, counted by the backup.
+  latest: { at: Date; bytes: number; authors?: number } | null
   kept: number
   next: Date
   // When this was asked.
@@ -42,12 +43,16 @@ export async function fetchBackupStatus(): Promise<BackupStatus | null> {
   const response = await fetch('/api/backups')
   if (!response.ok) return null
   const body = (await response.json()) as {
-    latest: { at: string; bytes: number } | null
+    latest: { at: string; bytes: number; authors?: number } | null
     kept: number
     next: string
   }
   return {
-    latest: body.latest && { at: new Date(body.latest.at), bytes: body.latest.bytes },
+    latest: body.latest && {
+      at: new Date(body.latest.at),
+      bytes: body.latest.bytes,
+      authors: body.latest.authors,
+    },
     kept: body.kept,
     next: new Date(body.next),
     at: new Date(),
